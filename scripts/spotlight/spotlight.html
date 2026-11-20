@@ -1,0 +1,1650 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Abyss Spotlight</title>
+	<link rel="stylesheet" href="spotlight.css?v=1793945000" />
+	<style>
+		html, body {
+			overflow: hidden !important;
+			height: auto !important;
+			margin: 0 !important;
+			padding: 0 !important;
+			scrollbar-width: none !important;
+			-ms-overflow-style: none !important;
+		}
+		html::-webkit-scrollbar,
+		body::-webkit-scrollbar,
+		*::-webkit-scrollbar {
+			display: none !important;
+			width: 0 !important;
+			height: 0 !important;
+			background: transparent !important;
+		}
+	</style>
+</head>
+
+<body>
+
+	<div id="hero-wrapper">
+		<div id="backdrop">
+			<img id="backdrop-img-a" class="backdrop-layer active" alt="" />
+			<img id="backdrop-img-b" class="backdrop-layer" alt="" />
+		</div>
+		<div id="content">
+			<img id="logo" alt="" />
+			<div id="title"></div>
+			<div id="episode-label"></div>
+			<div id="meta"></div>
+			<div id="progress-wrap" style="display:none">
+				<div id="progress-bar"></div>
+			</div>
+			<div id="plot"></div>
+			<div id="buttons"></div>
+		</div>
+		<div id="carousel-dots"></div>
+		<button id="nav-arrow-left" class="nav-arrow" aria-label="Previous item">
+			<svg xmlns="http://www.w3.org/2000/svg" height="26" viewBox="0 -960 960 960" width="26" fill="currentColor">
+				<path d="M560-240 320-480l240-240 56 56-184 184 184 184-56 56Z" />
+			</svg>
+		</button>
+		<button id="nav-arrow-right" class="nav-arrow" aria-label="Next item">
+			<svg xmlns="http://www.w3.org/2000/svg" height="26" viewBox="0 -960 960 960" width="26" fill="currentColor">
+				<path d="M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z" />
+			</svg>
+		</button>
+		<div id="showcase-3d-wrapper"></div>
+		<div id="clickzone" role="button" tabindex="0" aria-label="View item details"></div>
+	</div>
+
+	<div id="top10-container">
+		<div class="top10-header-wrap">
+			<h2 class="top10-heading">
+				<span class="top10-tag">TOP 10</span>
+				<span>Top Movies & Shows Today</span>
+			</h2>
+			<div class="top10-arrows">
+				<button id="top10-arrow-left" class="top10-arrow" aria-label="Scroll left">
+					<svg xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 -960 960 960" width="20"
+						fill="currentColor">
+						<path d="M560-240 320-480l240-240 56 56-184 184 184 184-56 56Z" />
+					</svg>
+				</button>
+				<button id="top10-arrow-right" class="top10-arrow" aria-label="Scroll right">
+					<svg xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 -960 960 960" width="20"
+						fill="currentColor">
+						<path d="M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z" />
+					</svg>
+				</button>
+			</div>
+		</div>
+		<div id="top10-row" class="top10-row"></div>
+	</div>
+	<div id="empty" style="display:none">Nothing to show</div>
+
+	<!-- Update notification -->
+	<div id="update-toast" style="display:none" role="status" aria-live="polite">
+		<div id="update-toast-inner">
+			<svg xmlns="http://www.w3.org/2000/svg" height="48px" viewBox="0 -960 960 960" width="48px"
+				fill="currentColor">
+				<path
+					d="M480-323.39 314.31-489.08l32.61-32.23 110.39 110V-780h45.38v368.69l110.39-110 32.61 32.23L480-323.39ZM237.69-180q-23.53 0-40.61-17.08T180-237.69V-363h45.39v125.31q0 4.61 3.84 8.46 3.85 3.84 8.46 3.84h484.62q4.61 0 8.46-3.84 3.84-3.85 3.84-8.46V-363H780v125.31q0 23.53-17.08 40.61T722.31-180H237.69Z" />
+			</svg>
+			<span id="update-text"></span>
+			<a id="update-link" href="#" target="_blank" rel="noopener noreferrer">View release</a>
+			<button id="update-dismiss" aria-label="Dismiss notification">
+				<svg xmlns="http://www.w3.org/2000/svg" height="14px" viewBox="0 -960 960 960" width="14px"
+					fill="currentColor">
+					<path
+						d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z" />
+				</svg>
+			</button>
+		</div>
+	</div>
+
+	<script>
+		// Version
+		// Updated automatically by the installer on each install/update.
+		// Format: matches GitHub release tag without the leading 'v', e.g. "1.2.1"
+		const ABYSS_SPOTLIGHT_VERSION = '1.2.1';
+
+		(async () => {
+			const $ = id => document.getElementById(id);
+
+			function getBaseUrl() {
+				try {
+					const loc = window.top.location;
+					const origin = `${loc.protocol}//${loc.host}`;
+					const match = loc.pathname.match(/^(.*?)\/web\b/);
+					const basePath = match ? match[1] : '';
+					return `${origin}${basePath}`;
+				} catch {
+					try {
+						const creds = JSON.parse(localStorage.getItem('jellyfin_credentials'));
+						const s = creds?.Servers?.[0];
+						return (s?.ManualAddress || s?.LocalAddress || s?.RemoteAddress || '').replace(/\/$/, '');
+					} catch { return ''; }
+				}
+			}
+
+			function getAuth() {
+				try {
+					const creds = JSON.parse(localStorage.getItem('jellyfin_credentials'));
+					const s = creds?.Servers?.[0];
+					return { token: s?.AccessToken, userId: s?.UserId };
+				} catch { return {}; }
+			}
+
+			function authHeaders(token) {
+				return { 'Authorization': `MediaBrowser Client="Jellyfin Web", Device="Abyss Spotlight", DeviceId="abyss-spotlight", Version="1.0", Token="${token}"` };
+			}
+
+			function formatRuntime(ticks) {
+				if (!ticks) return null;
+				const mins = Math.floor(ticks / 600000000);
+				if (mins < 60) return `${mins}m`;
+				const h = Math.floor(mins / 60), m = mins % 60;
+				return m > 0 ? `${h}h ${m}m` : `${h}h`;
+			}
+
+			function metaPillWithIcon(iconSvg, text) {
+				const span = document.createElement('span');
+				span.className = 'meta-pill';
+				span.innerHTML = `${iconSvg}<span>${text}</span>`;
+				return span;
+			}
+
+			function navigateTo(route) {
+				try { window.top.location.hash = route; }
+				catch { window.location.hash = route; }
+			}
+
+			async function fetchImageBlob(url, headers) {
+				try {
+					const res = await fetch(url, { headers });
+					if (!res.ok) return null;
+					return URL.createObjectURL(await res.blob());
+				} catch { return null; }
+			}
+
+			const isLegacyWebView = !(window.CSS && typeof window.CSS.supports === 'function' && window.CSS.supports('inset', '0'));
+
+			function startZoom(imgEl, durationMs, fromScale, toScale) {
+				if (!imgEl) return;
+				if (isLegacyWebView) {
+					imgEl.style.transition = 'opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1)';
+					imgEl.style.transform = 'translate3d(0, 0, 0)';
+					return;
+				}
+				const angle = Math.random() * Math.PI * 2;
+				const panDistance = 1.4;
+				const panX = (Math.cos(angle) * panDistance).toFixed(2);
+				const panY = (Math.sin(angle) * panDistance).toFixed(2);
+
+				imgEl.style.transition = 'opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0s';
+				imgEl.style.transform = `scale(${fromScale}) translate3d(0%, 0%, 0)`;
+				void imgEl.offsetWidth;
+				imgEl.style.transition = `opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform ${Math.round(durationMs / 1000)}s linear`;
+				imgEl.style.transform = `scale(${toScale}) translate3d(${panX}%, ${panY}%, 0)`;
+			}
+
+
+
+			const base = getBaseUrl();
+			const { token, userId } = getAuth();
+
+			if (!token || !userId) { $('empty').style.display = 'flex'; return; }
+
+			const headers = authHeaders(token);
+
+			const FIELDS = 'Overview,RunTimeTicks,UserData,OfficialRating,CommunityRating,SeriesName,SeriesId,ParentIndexNumber,IndexNumber,PlaybackPositionTicks,BackdropImageTags,RemoteTrailers,ProviderIds,ProductionYear';
+
+			async function fetchItems() {
+				let items = [];
+				const api = window.parent?.ApiClient || window.top?.ApiClient || window.ApiClient;
+				const uid = userId || (api && typeof api.getCurrentUserId === 'function' ? api.getCurrentUserId() : api?._currentUserId) || '';
+
+				// 1. Try ApiClient.getItems for Latest added
+				if (api && typeof api.getItems === 'function') {
+					try {
+						const d = await api.getItems(uid || undefined, {
+							Limit: 10,
+							Recursive: true,
+							IncludeItemTypes: 'Movie,Series',
+							SortBy: 'DateCreated',
+							SortOrder: 'Descending',
+							Fields: FIELDS
+						});
+						const raw = Array.isArray(d) ? d : (d?.Items || []);
+						if (raw.length) items = raw.map(i => ({ ...i, _source: 'latest' }));
+					} catch (e) { }
+				}
+
+				// 2. Fetch Latest via User HTTP
+				if (items.length === 0 && uid) {
+					try {
+						const latestRes = await fetch(
+							`${base}/Users/${uid}/Items/Latest?Limit=10&IncludeItemTypes=Movie,Series&Fields=${FIELDS}`,
+							{ headers }
+						);
+						if (latestRes.ok) {
+							const latestData = await latestRes.json();
+							const raw = Array.isArray(latestData) ? latestData : (latestData.Items || []);
+							if (raw.length) items = raw.map(i => ({ ...i, _source: 'latest' }));
+						}
+					} catch (e) { }
+				}
+
+				// 3. Fallback to broad items query (sorted by DateCreated descending)
+				if (items.length === 0) {
+					try {
+						const res = await fetch(
+							`${base}/Items?Limit=10&Recursive=true&SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=Movie,Series&Fields=${FIELDS}`,
+							{ headers }
+						);
+						if (res.ok) {
+							const d = await res.json();
+							const raw = Array.isArray(d) ? d : (d?.Items || []);
+							if (raw.length) items = raw.map(i => ({ ...i, _source: 'latest' }));
+						}
+					} catch (e) { }
+				}
+
+				return items;
+			}
+
+			let items = [];
+			let currentIndex = 0;
+			let autoTimer = null;
+			const AUTO_INTERVAL = 5000;
+
+			let isHeroVisible = true;
+
+			function isParentHomeVisible() {
+				if (document.hidden || !isHeroVisible) return false;
+				try {
+					const ownPage = window.frameElement?.closest?.('.page, [data-role="page"]');
+					if (ownPage && ownPage.classList.contains('hide')) return false;
+					const ownTab = window.frameElement?.closest?.('.tabContent, .pageTabContent');
+					if (ownTab && !ownTab.classList.contains('is-active')) return false;
+					const topDoc = window.top?.document;
+					if (topDoc) {
+						if (!ownPage) {
+							const activeIdxPage = topDoc.querySelector('#indexPage:not(.hide), .homePage:not(.hide)');
+							if (!activeIdxPage) return false;
+						}
+						if (topDoc.body.classList.contains('abyss-video-playing')) return false;
+					}
+				} catch (e) { }
+				return true;
+			}
+
+			function startAuto() {
+				stopAuto();
+				if (items.length <= 1 || !isParentHomeVisible() || isHoveringShowcase) return;
+				autoTimer = setInterval(() => {
+					if (!isParentHomeVisible() || isHoveringShowcase) {
+						stopAuto();
+						return;
+					}
+					currentIndex = (currentIndex + 1) % items.length;
+					renderItem(currentIndex);
+				}, AUTO_INTERVAL);
+			}
+
+			function stopAuto() {
+				if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+			}
+
+			// --- TOUCH SWIPE LOGIC START ---
+			let touchStartX = 0;
+			let touchStartY = 0;
+			let touchEndX = 0;
+			let touchEndY = 0;
+
+			function handleSwipe() {
+				const swipeThreshold = 50; // Minimum pixel distance for a valid swipe
+				const diffX = touchEndX - touchStartX;
+				const diffY = touchEndY - touchStartY;
+
+				if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > swipeThreshold) {
+					if (diffX < 0) {
+						// Swiped Left -> Next item
+						stopAuto();
+						currentIndex = (currentIndex + 1) % items.length;
+						renderItem(currentIndex);
+						startAuto();
+					} else {
+						// Swiped Right -> Previous item
+						stopAuto();
+						// Using `+ items.length` ensures we don't get negative values when wrapping around backwards
+						currentIndex = (currentIndex - 1 + items.length) % items.length;
+						renderItem(currentIndex);
+						startAuto();
+					}
+				}
+			}
+
+			const heroEl = $('hero-wrapper');
+			if (heroEl) {
+				heroEl.addEventListener('touchstart', e => {
+					if (e.target.closest('#top10-container')) return;
+					touchStartX = e.changedTouches[0].screenX;
+					touchStartY = e.changedTouches[0].screenY;
+				}, { passive: true });
+
+				heroEl.addEventListener('touchend', e => {
+					if (e.target.closest('#top10-container')) return;
+					touchEndX = e.changedTouches[0].screenX;
+					touchEndY = e.changedTouches[0].screenY;
+					handleSwipe();
+				}, { passive: true });
+			}
+			// --- TOUCH SWIPE LOGIC END ---
+
+			function setupHeroArrows() {
+				const leftBtn = $('nav-arrow-left');
+				const rightBtn = $('nav-arrow-right');
+
+				if (leftBtn) {
+					leftBtn.onclick = e => {
+						e.preventDefault();
+						e.stopPropagation();
+						if (!items || !items.length) return;
+						stopAuto();
+						currentIndex = (currentIndex - 1 + items.length) % items.length;
+						renderItem(currentIndex);
+						startAuto();
+					};
+				}
+
+				if (rightBtn) {
+					rightBtn.onclick = e => {
+						e.preventDefault();
+						e.stopPropagation();
+						if (!items || !items.length) return;
+						stopAuto();
+						currentIndex = (currentIndex + 1) % items.length;
+						renderItem(currentIndex);
+						startAuto();
+					};
+				}
+			}
+
+			function buildDots() {
+				const container = $('carousel-dots');
+				container.innerHTML = '';
+				if (items.length <= 1) { container.style.display = 'none'; return; }
+				container.style.display = 'flex';
+				items.forEach((_, i) => {
+					const dot = document.createElement('button');
+					dot.className = 'dot';
+					dot.setAttribute('aria-label', `Item ${i + 1}`);
+					dot.addEventListener('click', e => {
+						e.stopPropagation();
+						stopAuto();
+						currentIndex = i;
+						renderItem(i);
+						startAuto();
+					});
+					container.appendChild(dot);
+				});
+				updateDots();
+				setupHeroArrows();
+			}
+
+			function updateDots() {
+				const dots = [...$('carousel-dots').querySelectorAll('.dot')];
+				dots.forEach((dot, i) => {
+					const dist = Math.abs(i - currentIndex);
+					dot.className = 'dot' + (
+						dist === 0 ? ' dot-active' :
+							dist === 1 ? ' dot-near' :
+								dist === 2 ? ' dot-far' : ' dot-hidden'
+					);
+				});
+			}
+
+			const TMDB_KEYS = ['15d2ea6d0dc1d476efbca3ecc9292b9a', 'b0b533e49e29a9e32a67e4e0ae2b1e2a', 'c1894d03e913a52199b51909772d1f97'];
+			const deadTmdbKeys = new Set();
+			const dailyPosterCache = {};
+
+			async function getDailyPosterUrl(item) {
+				if (!item) return null;
+				if (dailyPosterCache[item.Id]) return dailyPosterCache[item.Id];
+
+				const tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.tmdb || item.ProviderIds?.TMDB;
+				const defaultPoster = `${base}/Items/${item.Id}/Images/Primary?quality=85&fillWidth=300`;
+				if (!tmdbId) return defaultPoster;
+
+				const dateSeed = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+				const isMovie = (item.Type === 'Movie' || item.MediaType === 'Video');
+				const endpoint = isMovie ? `movie/${tmdbId}` : `tv/${tmdbId}`;
+
+				for (const key of TMDB_KEYS) {
+					if (deadTmdbKeys.has(key)) continue;
+					try {
+						const res = await fetch(`https://api.themoviedb.org/3/${endpoint}/images?api_key=${key}`);
+						if (res.status === 401 || res.status === 403 || res.status === 429) {
+							deadTmdbKeys.add(key);
+							continue;
+						}
+						if (res.ok) {
+							const data = await res.json();
+							const posters = data?.posters;
+							if (posters && posters.length > 1) {
+								const posterIdx = dateSeed % posters.length;
+								const posterPath = posters[posterIdx]?.file_path;
+								if (posterPath) {
+									const fullUrl = `https://image.tmdb.org/t/p/w500${posterPath}`;
+									dailyPosterCache[item.Id] = fullUrl;
+									return fullUrl;
+								}
+							}
+							break;
+						}
+						if (res.status === 404) break;
+					} catch (e) { }
+				}
+
+				dailyPosterCache[item.Id] = defaultPoster;
+				return defaultPoster;
+			}
+
+			const spotlightCardTrailerCache = new Map();
+			let showcasePrefetchTimer = null;
+			let showcaseExpandTimer = null;
+			let activeShowcaseExpandedCard = null;
+			let showcaseTrailerMuted = false;
+			let isHoveringShowcase = false;
+
+			function clearShowcaseHoverTimers() {
+				if (showcasePrefetchTimer) {
+					clearTimeout(showcasePrefetchTimer);
+					showcasePrefetchTimer = null;
+				}
+				if (showcaseExpandTimer) {
+					clearTimeout(showcaseExpandTimer);
+					showcaseExpandTimer = null;
+				}
+			}
+
+			async function triggerSpotlightItemPlay(item) {
+				if (!item) return;
+				try {
+					if (window.top && typeof window.top.__abyssPlayMediaItem === 'function') {
+						await window.top.__abyssPlayMediaItem(item);
+						return;
+					}
+					if (window.parent && typeof window.parent.__abyssPlayMediaItem === 'function') {
+						await window.parent.__abyssPlayMediaItem(item);
+						return;
+					}
+				} catch (e) { }
+				try {
+					const pm = window.top?.PlaybackManager || window.top?.__jellyfinPlaybackManager || window.parent?.PlaybackManager || window.parent?.__jellyfinPlaybackManager || window.PlaybackManager || window.__jellyfinPlaybackManager;
+					if (pm && typeof pm.play === 'function') {
+						const serverId = item.ServerId || (window.top?.ApiClient && typeof window.top.ApiClient.serverId === 'function' ? window.top.ApiClient.serverId() : '') || (window.ApiClient && typeof window.ApiClient.serverId === 'function' ? window.ApiClient.serverId() : '') || '';
+						const playParams = {
+							ids: [item.Id],
+							startPositionTicks: item.UserData?.PlaybackPositionTicks || 0,
+							fullscreen: true
+						};
+						if (serverId) {
+							playParams.serverId = serverId;
+							if (!item.ServerId) item.ServerId = serverId;
+						}
+						if (item && Array.isArray(item.MediaSources) && item.MediaSources.length > 0) {
+							playParams.items = [item];
+						}
+						try {
+							if (window.top && window.top.document && window.top.document.body) {
+								window.top.document.body.classList.add('videoPlayerPage', 'is-video-playing', 'abyss-video-playing');
+							}
+						} catch (e) { }
+						await pm.play(playParams);
+						return;
+					}
+				} catch (e) { }
+				try {
+					const parentDoc = (window.top && window.top.document) || (window.parent && window.parent.document) || document;
+					const actionBtn = parentDoc.querySelector(
+						`[data-id="${item.Id}"][data-action="resume"],` +
+						`[data-id="${item.Id}"] [data-action="resume"],` +
+						`[data-id="${item.Id}"][data-action="play"],` +
+						`[data-id="${item.Id}"] [data-action="play"]`
+					);
+					if (actionBtn) { actionBtn.click(); return; }
+					const card = parentDoc.querySelector(`[data-id="${item.Id}"]`);
+					if (card) { card.click(); return; }
+				} catch (err) {
+					console.warn('[Abyss Spotlight] Could not trigger playback:', err);
+				}
+				navigateTo(`/video?id=${item.Id}`);
+			}
+
+			async function resolveSpotlightCardTrailerData(item) {
+				if (!item || !item.Id) return null;
+				if (spotlightCardTrailerCache.has(item.Id)) {
+					return spotlightCardTrailerCache.get(item.Id);
+				}
+
+				const pendingPromise = (async () => {
+					const isEp = item.Type === 'Episode';
+					const targetId = isEp ? (item.SeriesId || item.Id) : item.Id;
+					const hasBackdrop = Array.isArray(item.BackdropImageTags) && item.BackdropImageTags.length > 0;
+					const primaryFallbackUrl = getFastImageUrl(item.Id, 'Primary', 800, 80);
+					const rawBackdropUrl = (!isEp && hasBackdrop)
+						? getFastImageUrl(targetId, 'Backdrop', 800, 80)
+						: primaryFallbackUrl;
+					const rawLogoUrl = getFastImageUrl(targetId, 'Logo', 350, 85);
+
+					// Preload backdrop with automatic fallback to Primary poster if Backdrop 404s
+					const backdropUrl = await new Promise(resolve => {
+						const bImg = new Image();
+						bImg.onload = () => resolve(rawBackdropUrl);
+						bImg.onerror = () => resolve(primaryFallbackUrl);
+						bImg.src = rawBackdropUrl;
+					});
+
+					// Verify if logo exists
+					const logoUrl = await new Promise(resolve => {
+						const lImg = new Image();
+						lImg.onload = () => resolve(rawLogoUrl);
+						lImg.onerror = () => resolve(null);
+						lImg.src = rawLogoUrl;
+					});
+
+					// 1. Check Local Trailers (only if HTML5 video supports MP4 H.264, otherwise also resolve YouTube fallback)
+					const canPlayMp4 = Boolean(document.createElement('video').canPlayType('video/mp4; codecs="avc1.42E01E"'));
+					let streamUrl = null;
+					if (token && userId && targetId && canPlayMp4) {
+						try {
+							const res = await fetch(`${base}/Users/${userId}/Items/${targetId}/LocalTrailers?api_key=${encodeURIComponent(token)}`, { headers });
+							if (res.ok) {
+								const trailers = await res.json();
+								if (Array.isArray(trailers) && trailers.length > 0 && trailers[0].Id) {
+									streamUrl = `${base}/Videos/${trailers[0].Id}/stream?static=true&api_key=${encodeURIComponent(token)}`;
+								}
+							}
+						} catch (e) { }
+					}
+
+					// 2. Check RemoteTrailers on item or fetch full item
+					let trailerUrl = '';
+					if (item.RemoteTrailers && item.RemoteTrailers.length > 0) {
+						trailerUrl = item.RemoteTrailers[0].Url || '';
+					}
+
+					let fullItem = item;
+					if (!streamUrl && !trailerUrl && token && userId && targetId) {
+						try {
+							const res = await fetch(`${base}/Users/${userId}/Items/${targetId}?api_key=${encodeURIComponent(token)}`, { headers });
+							if (res.ok) {
+								fullItem = await res.json();
+								if (fullItem?.RemoteTrailers && fullItem.RemoteTrailers.length > 0) {
+									trailerUrl = fullItem.RemoteTrailers[0].Url || '';
+								}
+							}
+						} catch (e) { }
+					}
+
+					let youtubeId = '';
+					if (trailerUrl) {
+						const ytMatch = trailerUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+						if (ytMatch && ytMatch[1]) {
+							youtubeId = ytMatch[1];
+						}
+					}
+
+					// 3. Fallback: Query TMDB /videos
+					if (!streamUrl && !youtubeId) {
+						const tmdbId = fullItem?.ProviderIds?.Tmdb || fullItem?.ProviderIds?.tmdb || fullItem?.ProviderIds?.TMDB ||
+							item?.ProviderIds?.Tmdb || item?.ProviderIds?.tmdb || item?.ProviderIds?.TMDB;
+						if (tmdbId) {
+							const isMovie = (fullItem?.Type === 'Movie' || (!isEp && item.Type === 'Movie'));
+							const endpoint = isMovie ? `movie/${tmdbId}` : `tv/${tmdbId}`;
+							for (const key of TMDB_KEYS) {
+								if (deadTmdbKeys.has(key)) continue;
+								try {
+									const res = await fetch(`https://api.themoviedb.org/3/${endpoint}/videos?api_key=${key}`);
+									if (res.status === 401 || res.status === 403 || res.status === 429) {
+										deadTmdbKeys.add(key);
+										continue;
+									}
+									if (res.ok) {
+										const data = await res.json();
+										const vids = (data?.results || []).filter(v => v.site === 'YouTube' && v.key);
+										const best =
+											vids.find(v => v.type === 'Trailer' && v.official) ||
+											vids.find(v => v.type === 'Trailer') ||
+											vids.find(v => v.type === 'Teaser') ||
+											vids[0];
+										if (best?.key) {
+											youtubeId = best.key;
+										}
+										break;
+									}
+									if (res.status === 404) break;
+								} catch (e) { }
+							}
+						}
+					}
+
+					const result = {
+						itemId: item.Id,
+						name: (isEp ? item.SeriesName : item.Name) || item.Name || '',
+						backdropUrl,
+						logoUrl,
+						streamUrl,
+						youtubeId
+					};
+					spotlightCardTrailerCache.set(item.Id, result);
+					return result;
+				})();
+
+				spotlightCardTrailerCache.set(item.Id, pendingPromise);
+				return pendingPromise;
+			}
+
+			function destroyShowcaseCardMedia(card) {
+				if (!card) return;
+				const stage = card.querySelector('.showcase-trailer-stage');
+				if (!stage) return;
+
+				const video = stage.querySelector('video');
+				if (video) {
+					try {
+						video.pause();
+						video.removeAttribute('src');
+						video.load();
+						video.remove();
+					} catch (e) { }
+				}
+
+				// Remove iframe directly without mutating .src (preserves browser history)
+				const iframe = stage.querySelector('iframe');
+				if (iframe) {
+					try {
+						iframe.remove();
+					} catch (e) { }
+				}
+			}
+
+			function collapseShowcaseCard(card, immediate = false) {
+				if (!card) return;
+				card.classList.remove('is-timer-counting');
+				if (activeShowcaseExpandedCard === card) {
+					activeShowcaseExpandedCard = null;
+				}
+				if (card._showcaseCleanupTimer) {
+					clearTimeout(card._showcaseCleanupTimer);
+					card._showcaseCleanupTimer = null;
+				}
+
+				destroyShowcaseCardMedia(card);
+				card.classList.remove('is-trailer-expanded');
+
+				const wrapper = $('showcase-3d-wrapper');
+				if (wrapper) wrapper.classList.remove('has-expanded-card');
+
+				const removeStage = () => {
+					const stage = card.querySelector('.showcase-trailer-stage');
+					if (stage) stage.remove();
+				};
+
+				if (immediate) {
+					removeStage();
+				} else {
+					card._showcaseCleanupTimer = setTimeout(() => {
+						card._showcaseCleanupTimer = null;
+						if (!card.classList.contains('is-trailer-expanded')) {
+							removeStage();
+						}
+					}, 540);
+				}
+			}
+
+			function setShowcaseTrailerMuteState(stage, muted) {
+				showcaseTrailerMuted = muted;
+				const muteBtn = stage.querySelector('.showcase-trailer-mute-btn');
+				if (muteBtn) {
+					muteBtn.innerHTML = muted
+						? `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`
+						: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>`;
+					muteBtn.title = muted ? 'Unmute Trailer' : 'Mute Trailer';
+				}
+
+				const video = stage.querySelector('video');
+				if (video) {
+					video.muted = muted;
+				}
+
+				const iframe = stage.querySelector('iframe');
+				if (iframe && iframe.contentWindow) {
+					try {
+						const func = muted ? 'mute' : 'unMute';
+						iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args: [] }), '*');
+						if (!muted) {
+							iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'setVolume', args: [100] }), '*');
+						}
+					} catch (e) { }
+				}
+			}
+
+			async function expandShowcaseCardWithTrailer(card, item) {
+				if (!card || !card.isConnected || !card.classList.contains('is-center')) return;
+
+				if (activeShowcaseExpandedCard && activeShowcaseExpandedCard !== card) {
+					collapseShowcaseCard(activeShowcaseExpandedCard, true);
+				}
+
+				if (card._showcaseCleanupTimer) {
+					clearTimeout(card._showcaseCleanupTimer);
+					card._showcaseCleanupTimer = null;
+				}
+
+				const oldStage = card.querySelector('.showcase-trailer-stage');
+				if (oldStage) oldStage.remove();
+
+				const stage = document.createElement('div');
+				stage.className = 'showcase-trailer-stage';
+				stage.innerHTML = `
+					<img class="showcase-trailer-backdrop" alt="" />
+					<div class="showcase-trailer-video-wrap"></div>
+					<div class="showcase-trailer-bar">
+						<div class="showcase-trailer-brand"></div>
+						<div class="showcase-trailer-actions">
+							<button type="button" class="showcase-trailer-btn is-play" title="Play">
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg>
+							</button>
+							<button type="button" class="showcase-trailer-btn showcase-trailer-mute-btn" title="Mute Trailer"></button>
+						</div>
+					</div>
+				`;
+				card.appendChild(stage);
+				setShowcaseTrailerMuteState(stage, showcaseTrailerMuted);
+
+				const playQuickBtn = stage.querySelector('.showcase-trailer-btn.is-play');
+				if (playQuickBtn) {
+					playQuickBtn.addEventListener('click', async e => {
+						e.preventDefault();
+						e.stopPropagation();
+						collapseShowcaseCard(card, true);
+						await triggerSpotlightItemPlay(item);
+					});
+				}
+
+				const muteBtn = stage.querySelector('.showcase-trailer-mute-btn');
+				if (muteBtn) {
+					muteBtn.addEventListener('click', e => {
+						e.preventDefault();
+						e.stopPropagation();
+						setShowcaseTrailerMuteState(stage, !showcaseTrailerMuted);
+					});
+				}
+
+				const wrapper = $('showcase-3d-wrapper');
+				if (wrapper) wrapper.classList.add('has-expanded-card');
+
+				activeShowcaseExpandedCard = card;
+				requestAnimationFrame(() => {
+					if (activeShowcaseExpandedCard !== card) return;
+					card.classList.add('is-trailer-expanded');
+				});
+
+				const data = await resolveSpotlightCardTrailerData(item);
+				if (!data || activeShowcaseExpandedCard !== card || !stage.isConnected) return;
+
+				const backdropImg = stage.querySelector('.showcase-trailer-backdrop');
+				if (backdropImg && data.backdropUrl) {
+					backdropImg.src = data.backdropUrl;
+				}
+
+				const brandEl = stage.querySelector('.showcase-trailer-brand');
+				if (brandEl) {
+					if (data.logoUrl) {
+						brandEl.innerHTML = `<img class="showcase-trailer-logo" src="${data.logoUrl}" alt="${escapeHtml(data.name)}" />`;
+					} else {
+						brandEl.innerHTML = `<div class="showcase-trailer-title">${escapeHtml(data.name)}</div>`;
+					}
+				}
+
+				const videoWrap = stage.querySelector('.showcase-trailer-video-wrap');
+				if (!videoWrap) return;
+
+				if (data.streamUrl) {
+					const vid = document.createElement('video');
+					vid.className = 'showcase-trailer-video';
+					vid.src = data.streamUrl;
+					vid.autoplay = true;
+					vid.loop = true;
+					vid.muted = showcaseTrailerMuted;
+					vid.playsInline = true;
+					vid.setAttribute('playsinline', '');
+					if (showcaseTrailerMuted) vid.setAttribute('muted', '');
+
+					vid.addEventListener('playing', () => {
+						if (videoWrap.isConnected) videoWrap.classList.add('is-playing');
+					}, { once: true });
+
+					videoWrap.appendChild(vid);
+					vid.play().catch(() => {
+						vid.muted = true;
+						setShowcaseTrailerMuteState(stage, true);
+						vid.play().catch(() => { });
+					});
+				} else if (data.youtubeId) {
+					let origin = 'http://localhost';
+					try { origin = window.top.location.origin || window.location.origin || 'http://localhost'; } catch { }
+					const iframe = document.createElement('iframe');
+					iframe.className = 'showcase-trailer-iframe';
+					iframe.allow = 'autoplay; encrypted-media';
+					iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+					iframe.src = `https://www.youtube.com/embed/${data.youtubeId}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&iv_load_policy=3&modestbranding=1&playsinline=1&loop=1&playlist=${data.youtubeId}&enablejsapi=1&origin=${encodeURIComponent(origin)}`;
+					videoWrap.appendChild(iframe);
+
+					iframe.addEventListener('load', () => {
+						setTimeout(() => {
+							if (!stage.isConnected || activeShowcaseExpandedCard !== card) return;
+							videoWrap.classList.add('is-playing');
+							if (!showcaseTrailerMuted) {
+								setShowcaseTrailerMuteState(stage, false);
+							}
+						}, 550);
+					}, { once: true });
+				}
+			}
+
+			function startShowcaseCardHover(card, item) {
+				if (!card || !card.classList.contains('is-center')) return;
+				clearShowcaseHoverTimers();
+				if (activeShowcaseExpandedCard === card) return;
+
+				// Restart 2-second visual timer bar cleanly
+				card.classList.remove('is-timer-counting');
+				void card.offsetWidth;
+				card.classList.add('is-timer-counting');
+
+				showcasePrefetchTimer = setTimeout(() => {
+					resolveSpotlightCardTrailerData(item).catch(() => { });
+				}, 350);
+
+				showcaseExpandTimer = setTimeout(() => {
+					card.classList.remove('is-timer-counting');
+					expandShowcaseCardWithTrailer(card, item);
+				}, 2000);
+			}
+
+			function init3DShowcase() {
+				const wrapper = $('showcase-3d-wrapper');
+				if (!wrapper || !items.length) return;
+				wrapper.innerHTML = '';
+
+				items.forEach((item, idx) => {
+					const card = document.createElement('div');
+					card.className = 'showcase-3d-card';
+
+					const img = document.createElement('img');
+					img.className = 'showcase-poster-img';
+					img.alt = escapeHtml(item.Name || '');
+					img.loading = 'lazy';
+					img.src = `${base}/Items/${item.Id}/Images/Primary?quality=85&fillWidth=300`;
+
+					if (!item.ImageTags || !item.ImageTags.Primary) {
+						getDailyPosterUrl(item).then(posterUrl => {
+							if (posterUrl && img) img.src = posterUrl;
+						});
+					}
+
+					const timerBar = document.createElement('div');
+					timerBar.className = 'showcase-hover-timer';
+					timerBar.setAttribute('aria-hidden', 'true');
+					timerBar.innerHTML = `<div class="showcase-hover-timer-fill"></div>`;
+
+					card.appendChild(img);
+					card.appendChild(timerBar);
+
+					card.addEventListener('pointerenter', () => {
+						isHoveringShowcase = true;
+						stopAuto();
+						if (idx === currentIndex) {
+							startShowcaseCardHover(card, item);
+						}
+					});
+
+					card.addEventListener('pointerleave', () => {
+						isHoveringShowcase = false;
+						clearShowcaseHoverTimers();
+						card.classList.remove('is-timer-counting');
+						if (activeShowcaseExpandedCard === card) {
+							collapseShowcaseCard(card, false);
+						}
+						startAuto();
+					});
+
+					card.onclick = e => {
+						if (e.target.closest('.showcase-trailer-actions')) return;
+						e.stopPropagation();
+						if (idx === currentIndex) {
+							clearShowcaseHoverTimers();
+							collapseShowcaseCard(card, true);
+							const isEp = item.Type === 'Episode';
+							const detailId = isEp ? (item.SeriesId || item.Id) : item.Id;
+							navigateTo(`/details?id=${detailId}`);
+						} else {
+							clearShowcaseHoverTimers();
+							if (activeShowcaseExpandedCard) {
+								collapseShowcaseCard(activeShowcaseExpandedCard, true);
+							}
+							stopAuto();
+							currentIndex = idx;
+							renderItem(currentIndex);
+							if (isHoveringShowcase) {
+								startShowcaseCardHover(card, item);
+							} else {
+								startAuto();
+							}
+						}
+					};
+
+					wrapper.appendChild(card);
+				});
+
+				update3DShowcase(currentIndex);
+			}
+
+			function update3DShowcase(currentIdx) {
+				const cards = document.querySelectorAll('.showcase-3d-card');
+				if (!cards.length) return;
+				const total = items.length;
+
+				cards.forEach((card, idx) => {
+					if (idx !== currentIdx) {
+						card.classList.remove('is-timer-counting');
+						if (activeShowcaseExpandedCard === card) {
+							collapseShowcaseCard(card, true);
+						}
+					}
+					let offset = idx - currentIdx;
+					let pos = (offset + total) % total;
+					if (pos > Math.floor(total / 2)) pos -= total;
+
+					const isCenter = pos === 0;
+					const isAdjacent = Math.abs(pos) === 1;
+					const isVisible = Math.abs(pos) <= 1;
+
+					const translateX = pos * 45;
+					const scale = isCenter ? 1 : (isAdjacent ? 0.85 : 0.7);
+					const rotateY = pos * -10;
+					const zIndex = isCenter ? 10 : (isAdjacent ? 5 : 1);
+					const opacity = isCenter ? 1 : (isAdjacent ? 0.38 : 0);
+
+					card.style.display = isVisible ? 'block' : 'none';
+					if (isVisible) {
+						card.style.transform = `translate3d(${translateX}%, 0, 0) scale(${scale}) rotateY(${rotateY}deg)`;
+						card.style.zIndex = zIndex;
+						card.style.opacity = opacity;
+					}
+
+					if (isCenter) {
+						card.classList.add('is-center');
+					} else {
+						card.classList.remove('is-center');
+					}
+				});
+			}
+
+			function getFastImageUrl(itemId, type, width = 800, quality = 80) {
+				const tokenParam = token ? `&api_key=${token}` : '';
+				return `${base}/Items/${itemId}/Images/${type}?quality=${quality}&fillWidth=${width}${tokenParam}`;
+			}
+
+			function preloadItemAssets() {
+				if (!items || !items.length) return;
+				items.slice(0, 2).forEach(item => {
+					const isEp = item.Type === 'Episode';
+					const backdropTargetId = isEp ? (item.SeriesId || item.Id) : item.Id;
+					const backdropUrl = getFastImageUrl(backdropTargetId, isEp ? 'Primary' : 'Backdrop', 1280, 78);
+					const logoId = isEp ? (item.SeriesId || item.Id) : item.Id;
+					const logoUrl = getFastImageUrl(logoId, 'Logo', 450, 82);
+					const bImg = new Image();
+					bImg.src = backdropUrl;
+					const lImg = new Image();
+					lImg.src = logoUrl;
+				});
+			}
+
+			let currentActiveLayerKey = 'a';
+
+			async function renderItem(index) {
+				const item = items[index];
+				if (!item) return;
+
+				const isEp = item.Type === 'Episode';
+				const logoId = isEp ? (item.SeriesId || item.Id) : item.Id;
+				const detailId = isEp ? (item.SeriesId || item.Id) : item.Id;
+				const detailRoute = `/details?id=${detailId}`;
+				const playRoute = `/video?id=${item.Id}`;
+
+				// Dual-Layer Backdrop Crossfade - seamless image transition without ghosting
+				const activeImg = $(currentActiveLayerKey === 'a' ? 'backdrop-img-a' : 'backdrop-img-b');
+				const nextLayerKey = currentActiveLayerKey === 'a' ? 'b' : 'a';
+				const nextImg = $(currentActiveLayerKey === 'a' ? 'backdrop-img-b' : 'backdrop-img-a');
+
+				const backdropTargetId = isEp ? (item.SeriesId || item.Id) : item.Id;
+
+				// Daily 24-Hour Rotating Backdrop Selection
+				const dateSeed = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+				const backdropTags = item.BackdropImageTags || item.SeriesBackdropImageTags || [];
+				let backdropUrl = getFastImageUrl(backdropTargetId, (isEp || backdropTags.length === 0) ? 'Primary' : 'Backdrop', 1280, 80);
+
+				if (backdropTags.length > 1 && !isEp) {
+					const backdropIdx = dateSeed % backdropTags.length;
+					const tag = backdropTags[backdropIdx];
+					const tokenParam = token ? `&api_key=${token}` : '';
+					backdropUrl = `${base}/Items/${backdropTargetId}/Images/Backdrop/${backdropIdx}?quality=78&fillWidth=1280&tag=${tag}${tokenParam}`;
+				}
+
+				const fallbackBackdropUrl = getFastImageUrl(item.Id, 'Primary', 1280, 80);
+
+				nextImg.style.objectPosition = isEp ? 'center center' : 'center 20%';
+
+				let didSwapBackdrop = false;
+				const swapBackdrop = (url) => {
+					if (didSwapBackdrop) return;
+					didSwapBackdrop = true;
+					nextImg.src = url;
+					nextImg.classList.add('active');
+					activeImg.classList.remove('active');
+					currentActiveLayerKey = nextLayerKey;
+					startZoom(nextImg, 9000, 1, 1.08);
+				};
+
+				const preloader = new Image();
+				preloader.onload = () => swapBackdrop(backdropUrl);
+				preloader.onerror = () => swapBackdrop(fallbackBackdropUrl);
+				preloader.src = backdropUrl;
+
+				if (preloader.complete && preloader.naturalWidth !== 0) {
+					swapBackdrop(backdropUrl);
+				}
+
+				// Preload adjacent slides for 0ms delay during navigation
+				const nextIdx = (index + 1) % items.length;
+				const prevIdx = (index - 1 + items.length) % items.length;
+				[nextIdx, prevIdx].forEach(idx => {
+					const it = items[idx];
+					if (it) {
+						const ep = it.Type === 'Episode';
+						const bId = ep ? (it.SeriesId || it.Id) : it.Id;
+						const bUrl = getFastImageUrl(bId, ep ? 'Primary' : 'Backdrop', 1280, 80);
+						(new Image()).src = bUrl;
+					}
+				});
+
+				updateDots();
+				update3DShowcase(index);
+
+				// Logo / title
+				const logoEl = $('logo');
+				const titleEl = $('title');
+				const logoUrl = getFastImageUrl(logoId, 'Logo', 500, 85);
+
+				const logoPreloader = new Image();
+				logoPreloader.onload = () => {
+					logoEl.src = logoUrl;
+					logoEl.style.display = 'block';
+					titleEl.style.display = 'none';
+				};
+				logoPreloader.onerror = () => {
+					logoEl.style.display = 'none';
+					titleEl.style.display = 'block';
+					titleEl.textContent = isEp ? item.SeriesName : item.Name;
+				};
+				logoPreloader.src = logoUrl;
+
+				// Episode label
+				let episodePrefix = '';
+				const episodeLabelEl = $('episode-label');
+				if (isEp) {
+					const parts = [];
+					if (item.ParentIndexNumber != null && item.IndexNumber != null) {
+						episodePrefix = `S${item.ParentIndexNumber} E${item.IndexNumber}`;
+						parts.push(episodePrefix);
+					}
+					if (item.Name) parts.push(item.Name);
+					episodeLabelEl.textContent = parts.join('  \u2013  ');
+					episodeLabelEl.style.display = 'block';
+				} else {
+					episodeLabelEl.textContent = '';
+					episodeLabelEl.style.display = 'none';
+				}
+
+				// Buttons
+				const buttonsEl = $('buttons');
+				buttonsEl.innerHTML = '';
+
+				const playBtn = document.createElement('button');
+				playBtn.className = 'btn btn-play';
+				const isResume = item._source === 'resume';
+				const btnLabel = isResume
+					? (isEp ? `Continue ${episodePrefix}` : 'Resume')
+					: (isEp ? `Play ${episodePrefix}`.trim() : 'Play');
+				playBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M320-273v-414q0-17 12-28.5t28-11.5q5 0 10.5 1.5T381-721l326 207q9 6 13.5 15t4.5 19q0 10-4.5 19T707-446L381-239q-5 3-10.5 4.5T360-233q-16 0-28-11.5T320-273Z"/></svg>${btnLabel}`;
+
+				playBtn.onclick = e => {
+					e.preventDefault();
+					e.stopPropagation();
+					if (activeShowcaseExpandedCard) {
+						collapseShowcaseCard(activeShowcaseExpandedCard, true);
+					}
+					triggerSpotlightItemPlay(item);
+				};
+				buttonsEl.appendChild(playBtn);
+
+				const trailerBtn = document.createElement('button');
+				trailerBtn.className = 'btn btn-trailer';
+				trailerBtn.type = 'button';
+				trailerBtn.setAttribute('aria-label', 'Watch Trailer');
+				trailerBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor"><path d="m380-300 280-180-280-180v360ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z"/></svg><span>Trailer</span>`;
+				trailerBtn.onclick = e => {
+					e.preventDefault();
+					e.stopPropagation();
+					playSpotlightTrailer(item);
+				};
+				buttonsEl.appendChild(trailerBtn);
+
+				// Meta pills
+				const metaEl = $('meta');
+				metaEl.innerHTML = '';
+				const SVG_RATING = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#e3e3e3"><path d="M168-144q-29 0-50.5-21.5T96-216v-528q0-29.7 21.5-50.85Q139-816 168-816h624q29 0 50.5 21.15T864-744v528q0 29-21.5 50.5T792-144H168Zm337.5-154.35Q516-308.7 516-324v-168q0-15.3-10.29-25.65Q495.42-528 480.21-528t-25.71 10.35Q444-507.3 444-492v168q0 15.3 10.29 25.65Q464.58-288 479.79-288t25.71-10.35ZM480-600q14 0 25-11t11-25.5q0-14.5-11-25T479.5-672q-14.5 0-25 10.35T444-636q0 14 10.35 25T480-600ZM168-228h72v-72h-72v72Zm552 0h72v-72h-72v72ZM168-372h72v-72h-72v72Zm552 0h72v-72h-72v72ZM168-516h72v-72h-72v72Zm552 0h72v-72h-72v72ZM168-660h72v-72h-72v72Zm552 0h72v-72h-72v72Z"/></svg>`;
+				const SVG_CLOCK = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#e3e3e3"><path d="M516-510v-174q0-15.3-10.29-25.65Q495.42-720 480.21-720t-25.71 10.35Q444-699.3 444-684v189q0 8 3 14.5t8 11.5l133.85 133.85Q600-324 614.5-324.5 629-325 640-336t11-25.5q0-14.5-11.34-25.75L516-510ZM480-96q-79.38 0-149.19-30T208.5-208.5Q156-261 126-330.96t-30-149.5Q96-560 126-630q30-70 82.5-122t122.46-82q69.96-30 149.5-30t149.55 30.24q70 30.24 121.79 82.08 51.78 51.84 81.99 121.92Q864-559.68 864-480q0 79.38-30 149.19T752-208.5Q700-156 629.87-126T480-96Z"/></svg>`;
+				const SVG_STAR = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#e3e3e3"><path d="m480-285-164 98q-11 6-21.5 5t-18.5-7q-8-6-12-16.5t-1-21.5l43-183-145-123q-9-8-11-18.5t1-20.5q3-10 11-16.5t20-7.5l190-17 75-174q5-11 14-16.5t19-5.5q10 0 19 5.5t14 16.5l75 175 190 16q12 1 20 8t11 17q3 10 .5 20T798-533L654-410l43 183q3 11-1 21.5T684-189q-8 6-18.5 7t-21.5-5l-164-98Z"/></svg>`;
+
+				if (item.OfficialRating) metaEl.appendChild(metaPillWithIcon(SVG_RATING, item.OfficialRating));
+				const rt = formatRuntime(item.RunTimeTicks);
+				if (rt) metaEl.appendChild(metaPillWithIcon(SVG_CLOCK, rt));
+				if (item.CommunityRating) metaEl.appendChild(metaPillWithIcon(SVG_STAR, item.CommunityRating.toFixed(1)));
+
+				// Progress bar; only for resume items
+				const played = item.UserData?.PlayedPercentage;
+				if (played && played > 0 && isResume) {
+					$('progress-wrap').style.display = 'block';
+					$('progress-bar').style.width = `${Math.min(played, 100)}%`;
+				} else {
+					$('progress-wrap').style.display = 'none';
+				}
+
+
+				$('plot').textContent = item.Overview || '';
+
+				const clickzone = $('clickzone');
+				if (clickzone) {
+					let lastNavTime = 0;
+					const triggerNav = (e) => {
+						if (e) {
+							if (e.cancelable) e.preventDefault();
+							e.stopPropagation();
+						}
+						const now = Date.now();
+						if (now - lastNavTime < 400) return;
+						lastNavTime = now;
+						navigateTo(detailRoute);
+					};
+
+					clickzone.onclick = triggerNav;
+					clickzone.ontouchend = (e) => {
+						const diffX = Math.abs(touchEndX - touchStartX);
+						const diffY = Math.abs(touchEndY - touchStartY);
+						if (diffX < 15 && diffY < 15) {
+							triggerNav(e);
+						}
+					};
+					clickzone.onkeydown = (e) => {
+						if (e.key === 'Enter' || e.key === ' ') {
+							triggerNav(e);
+						}
+					};
+				}
+
+				$('content').style.transform = '';
+				$('content').style.opacity = '';
+				$('backdrop').style.opacity = '';
+				$('backdrop').classList.add('loaded');
+				$('content').classList.add('visible');
+			}
+
+			function escapeHtml(str) {
+				return String(str || '').replace(/[&<>"']/g, c => ({
+					'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+				}[c]));
+			}
+
+			function openSpotlightTrailerOverlay(item, youtubeId, searchFallback) {
+				let targetWin = window;
+				let targetDoc = document;
+				try {
+					if (window.top && window.top.document && window.top.document.body) {
+						targetWin = window.top;
+						targetDoc = window.top.document;
+					}
+				} catch (e) { }
+
+				const existingPlayer = targetDoc.body.querySelector('.abyss-trailer-player-overlay');
+				if (existingPlayer) existingPlayer.remove();
+
+				const playerOverlay = targetDoc.createElement('div');
+				playerOverlay.className = 'abyss-trailer-player-overlay';
+				playerOverlay.style.cssText = `
+					position: fixed;
+					top: 0;
+					left: 0;
+					width: 100vw;
+					height: 100vh;
+					background-color: #000000;
+					z-index: 99999999;
+					display: flex;
+					flex-direction: column;
+					overflow: hidden;
+				`;
+
+				const currentOrigin = targetWin.location.origin || 'http://localhost';
+				let srcUrl = '';
+				let rawYtUrl = youtubeId ? `https://www.youtube.com/watch?v=${youtubeId}` : '';
+
+				if (youtubeId) {
+					srcUrl = `https://www.youtube.com/embed/${youtubeId}?autoplay=1&playsinline=1&enablejsapi=1&rel=0&modestbranding=1&origin=${encodeURIComponent(currentOrigin)}`;
+				} else if (searchFallback) {
+					const q = encodeURIComponent(searchFallback);
+					srcUrl = `https://www.youtube.com/embed?listType=search&list=${q}&autoplay=1&playsinline=1&origin=${encodeURIComponent(currentOrigin)}`;
+					rawYtUrl = `https://www.youtube.com/results?search_query=${q}`;
+				}
+
+				const itemName = (item?.Type === 'Episode' ? item?.SeriesName : item?.Name) || item?.Name || 'Movie';
+				playerOverlay.innerHTML = `
+					<div style="position:absolute;top:0;left:0;right:0;height:60px;background:linear-gradient(to bottom, rgba(0,0,0,0.9), transparent);z-index:10;display:flex;align-items:center;padding:0 16px;gap:12px;pointer-events:auto;">
+						<button type="button" class="abyss-trailer-back-btn" style="background:rgba(255,255,255,0.15);border:none;color:#ffffff;border-radius:50%;width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:background 0.2s ease;" title="Back">
+							<svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10 19l-7-7m0 0l7-7m-7 7h18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"></path></svg>
+						</button>
+						<div style="flex:1;color:#ffffff;font-size:clamp(13px, 3.5vw, 16px);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 4px rgba(0,0,0,0.8);">
+							${escapeHtml(itemName)} - Official Trailer
+						</div>
+						${rawYtUrl ? `<a href="${rawYtUrl}" target="_blank" rel="noopener" style="color:rgba(255,255,255,0.7);font-size:12px;text-decoration:none;background:rgba(255,255,255,0.1);padding:6px 12px;border-radius:20px;flex-shrink:0;backdrop-filter:blur(8px);display:flex;align-items:center;gap:4px;" title="Open in YouTube if video is restricted">
+							<svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M10 15l5.19-3L10 9v6m11.56-7.83c.13.47.22 1.1.28 1.9.07.8.1 1.49.1 2.09L22 12c0 .6-.03 1.29-.1 2.09-.06.8-.15 1.43-.28 1.9-.16.58-.47 1.05-.93 1.42-.46.37-.98.58-1.57.64-.8.07-1.77.1-2.92.1H7.8c-1.15 0-2.12-.03-2.92-.1-.59-.06-1.11-.27-1.57-.64-.46-.37-.77-.84-.93-1.42-.13-.47-.22-1.1-.28-1.9-.07-.8-.1-1.49-.1-2.09L2 12c0-.6.03-1.29.1-2.09.06-.8.15-1.43.28-1.9.16-.58.47-1.05.93-1.42.46-.37.98-.58 1.57-.64.8-.07 1.77-.1 2.92-.1h8.4c1.15 0 2.12.03 2.92.1.59.06 1.11.27 1.57.64.46.37.77.84.93 1.42z"></path></svg>
+							YouTube
+						</a>` : ''}
+					</div>
+					<div style="flex:1;width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative;background:#000;">
+						<iframe
+							src="${srcUrl}"
+							style="width:100%;height:100%;border:none;"
+							allow="autoplay; encrypted-media; fullscreen; picture-in-picture; accelerometer; gyroscope"
+							referrerpolicy="strict-origin-when-cross-origin"
+							allowfullscreen>
+						</iframe>
+					</div>
+				`;
+
+				targetDoc.body.appendChild(playerOverlay);
+				targetDoc.body.classList.add('is-video-playing');
+
+				let historyPushed = false;
+				try {
+					targetWin.history.pushState({ abyssTrailerOpen: true }, '', targetWin.location.href);
+					historyPushed = true;
+				} catch (e) { }
+
+				let isClosed = false;
+				const closePlayer = (shouldPopHistory = false) => {
+					if (isClosed) return;
+					isClosed = true;
+
+					playerOverlay.style.opacity = '0';
+					playerOverlay.style.transition = 'opacity 0.2s ease';
+					setTimeout(() => {
+						playerOverlay.remove();
+						targetDoc.body.classList.remove('is-video-playing');
+						startAuto();
+					}, 200);
+
+					targetWin.removeEventListener('keydown', handleKeyDown);
+					targetWin.removeEventListener('popstate', handlePopState);
+					window.removeEventListener('keydown', handleKeyDown);
+
+					if (shouldPopHistory && historyPushed) {
+						try { targetWin.history.back(); } catch (e) { }
+					}
+				};
+
+				const handlePopState = () => closePlayer(false);
+				const handleKeyDown = (e) => {
+					if (e.key === 'Escape' || e.key === 'BackSpace') closePlayer(true);
+				};
+
+				const backBtn = playerOverlay.querySelector('.abyss-trailer-back-btn');
+				if (backBtn) backBtn.addEventListener('click', () => closePlayer(true));
+
+				targetWin.addEventListener('keydown', handleKeyDown);
+				targetWin.addEventListener('popstate', handlePopState);
+				window.addEventListener('keydown', handleKeyDown);
+			}
+
+			async function playSpotlightTrailer(item) {
+				if (!item) return;
+				stopAuto();
+
+				const isEp = item.Type === 'Episode';
+				const targetId = isEp ? (item.SeriesId || item.Id) : item.Id;
+				const api = window.parent?.ApiClient || window.top?.ApiClient || window.ApiClient;
+
+				// 1. Try Local Trailers via Jellyfin ApiClient / PlaybackManager
+				if (token && userId && targetId) {
+					try {
+						const res = await fetch(`${base}/Users/${userId}/Items/${targetId}/LocalTrailers?api_key=${token}`, { headers });
+						if (res.ok) {
+							const trailers = await res.json();
+							if (Array.isArray(trailers) && trailers.length) {
+								if (api && typeof api.play === 'function') {
+									api.play({ ids: [trailers[0].Id] });
+									return;
+								}
+								const pm = window.top?.PlaybackManager || window.parent?.PlaybackManager || window.PlaybackManager;
+								if (pm && typeof pm.play === 'function') {
+									pm.play({ ids: [trailers[0].Id] });
+									return;
+								}
+								navigateTo(`/video?id=${trailers[0].Id}`);
+								return;
+							}
+						}
+					} catch (e) { }
+				}
+
+				// 2. Extract Remote Trailer URL from item or full item fetch
+				let trailerUrl = '';
+				if (item.RemoteTrailers && item.RemoteTrailers.length > 0) {
+					trailerUrl = item.RemoteTrailers[0].Url || '';
+				}
+
+				let fullItem = item;
+				if (!trailerUrl && token && userId && targetId) {
+					try {
+						const res = await fetch(`${base}/Users/${userId}/Items/${targetId}?api_key=${token}`, { headers });
+						if (res.ok) {
+							fullItem = await res.json();
+							if (fullItem?.RemoteTrailers && fullItem.RemoteTrailers.length > 0) {
+								trailerUrl = fullItem.RemoteTrailers[0].Url || '';
+							}
+						}
+					} catch (e) { }
+				}
+
+				let youtubeId = '';
+				if (trailerUrl) {
+					const ytMatch = trailerUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+					if (ytMatch && ytMatch[1]) {
+						youtubeId = ytMatch[1];
+					}
+				}
+
+				// 3. Fallback: Query TMDB /videos for official YouTube trailer key
+				if (!youtubeId) {
+					const tmdbId = fullItem?.ProviderIds?.Tmdb || fullItem?.ProviderIds?.tmdb || fullItem?.ProviderIds?.TMDB ||
+						item?.ProviderIds?.Tmdb || item?.ProviderIds?.tmdb || item?.ProviderIds?.TMDB;
+					if (tmdbId) {
+						const isMovie = (fullItem?.Type === 'Movie' || (!isEp && item.Type === 'Movie'));
+						const endpoint = isMovie ? `movie/${tmdbId}` : `tv/${tmdbId}`;
+						for (const key of TMDB_KEYS) {
+							if (deadTmdbKeys.has(key)) continue;
+							try {
+								const res = await fetch(`https://api.themoviedb.org/3/${endpoint}/videos?api_key=${key}`);
+								if (res.status === 401 || res.status === 403 || res.status === 429) {
+									deadTmdbKeys.add(key);
+									continue;
+								}
+								if (res.ok) {
+									const data = await res.json();
+									const vids = (data?.results || []).filter(v => v.site === 'YouTube' && v.key);
+									const best =
+										vids.find(v => v.type === 'Trailer' && v.official) ||
+										vids.find(v => v.type === 'Trailer') ||
+										vids.find(v => v.type === 'Teaser') ||
+										vids[0];
+									if (best?.key) {
+										youtubeId = best.key;
+									}
+									break;
+								}
+								if (res.status === 404) break;
+							} catch (e) { }
+						}
+					}
+				}
+
+				// 4. Open Fullscreen Overlay
+				const titleName = (isEp ? item.SeriesName : item.Name) || fullItem?.Name || 'Movie';
+				const year = fullItem?.ProductionYear || item?.ProductionYear || '';
+				if (youtubeId) {
+					openSpotlightTrailerOverlay(fullItem || item, youtubeId);
+				} else {
+					openSpotlightTrailerOverlay(fullItem || item, null, `${titleName} ${year} Official Trailer`.trim());
+				}
+			}
+
+			async function initTop10Row(heroItems = []) {
+				const row = $('top10-row');
+				if (!row) return;
+				row.innerHTML = '';
+
+				let topItems = [];
+				const api = window.parent?.ApiClient || window.top?.ApiClient || window.ApiClient;
+				const uid = userId || (api && typeof api.getCurrentUserId === 'function' ? api.getCurrentUserId() : api?._currentUserId) || '';
+				const FIELDS = 'PrimaryImageAspectRatio,BasicSyncInfo,Overview,Path,OfficialRating,CommunityRating,CriticRating,RunTimeTicks,ParentIndexNumber,IndexNumber,UserData';
+
+				let raw = [];
+				if (api && typeof api.getItems === 'function') {
+					try {
+						const data = await api.getItems(uid || undefined, {
+							Limit: 40,
+							Recursive: true,
+							SortBy: 'DateCreated',
+							SortOrder: 'Descending',
+							IncludeItemTypes: 'Movie,Series',
+							Fields: FIELDS
+						});
+						raw = Array.isArray(data) ? data : (data?.Items || []);
+					} catch (e) { }
+				}
+
+				const headers = token ? authHeaders(token) : {};
+
+				if (!raw.length && uid) {
+					try {
+						const res = await fetch(
+							`${base}/Users/${uid}/Items?Limit=40&Recursive=true&SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=Movie,Series&Fields=${FIELDS}`,
+							{ headers }
+						);
+						if (res.ok) {
+							const data = await res.json();
+							raw = Array.isArray(data) ? data : (data?.Items || []);
+						}
+					} catch (e) { }
+				}
+
+				if (!raw.length) {
+					try {
+						const res = await fetch(
+							`${base}/Items?Limit=40&Recursive=true&SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=Movie,Series&Fields=${FIELDS}`,
+							{ headers }
+						);
+						if (res.ok) {
+							const data = await res.json();
+							raw = Array.isArray(data) ? data : (data?.Items || []);
+						}
+					} catch (e) { }
+				}
+
+				if (raw.length) {
+					const getRating = (item) => {
+						if (typeof item.CommunityRating === 'number' && item.CommunityRating > 0) {
+							return item.CommunityRating;
+						}
+						if (typeof item.CriticRating === 'number' && item.CriticRating > 0) {
+							return item.CriticRating > 10 ? item.CriticRating / 10 : item.CriticRating;
+						}
+						return 0;
+					};
+
+					// Sort the 40 latest items by rating descending
+					topItems = raw.slice().sort((a, b) => {
+						const rateA = getRating(a);
+						const rateB = getRating(b);
+						if (rateB !== rateA) return rateB - rateA;
+						return (b.UserData?.Rating || 0) - (a.UserData?.Rating || 0);
+					}).slice(0, 10);
+				}
+
+				if (!topItems.length && heroItems && heroItems.length) {
+					topItems = heroItems.slice().sort((a, b) => {
+						const rateA = a.CommunityRating ?? a.CriticRating ?? 0;
+						const rateB = b.CommunityRating ?? b.CriticRating ?? 0;
+						return rateB - rateA;
+					}).slice(0, 10);
+				}
+
+				if (!topItems.length) return;
+
+				topItems.slice(0, 10).forEach((item, idx) => {
+					const card = document.createElement('div');
+					card.className = 'top10-card';
+					card.setAttribute('data-id', item.Id);
+
+					const num = document.createElement('div');
+					num.className = 'top10-num';
+					num.textContent = idx + 1;
+
+					const posterWrap = document.createElement('div');
+					posterWrap.className = 'top10-poster-wrap';
+
+					const poster = document.createElement('img');
+					poster.className = 'top10-poster';
+					poster.alt = escapeHtml(item.Name || '');
+					poster.loading = 'lazy';
+
+					const tokenParam = token ? `&api_key=${token}` : '';
+					const posterUrl = `${base}/Items/${item.Id}/Images/Primary?quality=78&fillWidth=240${tokenParam}`;
+					const fallbackUrl = `${base}/Items/${item.Id}/Images/Backdrop/0?quality=78&fillWidth=240${tokenParam}`;
+					poster.onerror = () => { if (poster.src !== fallbackUrl) poster.src = fallbackUrl; };
+					poster.src = posterUrl;
+
+					// Hover overlay with title & metadata
+					const overlay = document.createElement('div');
+					overlay.className = 'top10-card-overlay';
+
+					const titleEl = document.createElement('div');
+					titleEl.className = 'top10-overlay-title';
+					titleEl.textContent = item.Name || '';
+
+					const metaEl = document.createElement('div');
+					metaEl.className = 'top10-overlay-meta';
+
+					if (item.CommunityRating) {
+						const starBadge = document.createElement('span');
+						starBadge.className = 'top10-meta-badge red';
+						starBadge.textContent = `\u2605 ${item.CommunityRating.toFixed(1)}`;
+						metaEl.appendChild(starBadge);
+					}
+
+					overlay.appendChild(titleEl);
+					overlay.appendChild(metaEl);
+
+					posterWrap.appendChild(poster);
+					posterWrap.appendChild(overlay);
+
+					card.appendChild(num);
+					card.appendChild(posterWrap);
+
+					card.onclick = () => {
+						const detailId = item.Type === 'Episode' ? (item.SeriesId || item.Id) : item.Id;
+						navigateTo(`/details?id=${detailId}`);
+					};
+
+					row.appendChild(card);
+				});
+
+				const leftBtn = $('top10-arrow-left');
+				const rightBtn = $('top10-arrow-right');
+				if (leftBtn) leftBtn.onclick = () => row.scrollBy({ left: -380, behavior: 'smooth' });
+				if (rightBtn) rightBtn.onclick = () => row.scrollBy({ left: 380, behavior: 'smooth' });
+			}
+
+			// Boot
+			items = await fetchItems();
+			if (!items.length) {
+				$('empty').style.display = 'flex';
+			} else {
+				$('empty').style.display = 'none';
+				preloadItemAssets();
+				buildDots();
+				init3DShowcase();
+				await renderItem(0);
+				startAuto();
+			}
+
+			initTop10Row(items).catch(err => console.error('[Top10 Error]:', err));
+
+			try {
+				window.top.addEventListener('hashchange', () => {
+					clearShowcaseHoverTimers();
+					if (activeShowcaseExpandedCard) collapseShowcaseCard(activeShowcaseExpandedCard, true);
+					if (isParentHomeVisible()) startAuto(); else stopAuto();
+				});
+			} catch (e) { }
+
+			if ('IntersectionObserver' in window && heroEl) {
+				const io = new IntersectionObserver((entries) => {
+					for (const entry of entries) {
+						isHeroVisible = entry.isIntersecting;
+						if (!isHeroVisible) {
+							stopAuto();
+							clearShowcaseHoverTimers();
+							if (activeShowcaseExpandedCard) collapseShowcaseCard(activeShowcaseExpandedCard, true);
+						} else {
+							startAuto();
+						}
+					}
+				}, { threshold: 0.05 });
+				io.observe(heroEl);
+			}
+
+			window.addEventListener('message', (e) => {
+				if (e.data && e.data.type === 'abyss-spotlight-visibility') {
+					isHeroVisible = Boolean(e.data.visible);
+					if (!isHeroVisible) {
+						stopAuto();
+						clearShowcaseHoverTimers();
+						if (activeShowcaseExpandedCard) collapseShowcaseCard(activeShowcaseExpandedCard, true);
+					} else {
+						startAuto();
+					}
+				}
+			});
+
+			document.addEventListener('visibilitychange', () => {
+				if (document.hidden) {
+					stopAuto();
+					clearShowcaseHoverTimers();
+					if (activeShowcaseExpandedCard) collapseShowcaseCard(activeShowcaseExpandedCard, true);
+				} else {
+					startAuto();
+				}
+			});
+
+		})();
+	</script>
+</body>
+
+</html>

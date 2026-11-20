@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Jellyfin Nova</title>
+</head>
+<body>
+    <div id="NovaConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="NovaConfigForm">
+                    <div class="sectionTitleContainer flex align-items-center">
+                        <h2 class="sectionTitle">Jellyfin Nova Settings</h2>
+                    </div>
+
+                    <p style="opacity:0.8;margin-bottom:1.5em;">
+                        Configure the Jellyfin Nova cinematic UI theme. Changes take effect on the next page refresh (no server restart required).
+                    </p>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkEnabled" type="checkbox" is="emby-checkbox" />
+                            <span>Enable Jellyfin Nova Theme</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">
+                            Injects the Nova stylesheet, details hero banner, library banners, and custom video player OSD into Jellyfin Web, Mobile Apps, and Jellyfin Media Player.
+                        </div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkEnableSpotlight" type="checkbox" is="emby-checkbox" />
+                            <span>Enable Home Spotlight &amp; Top 10 Banner</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">
+                            Displays the cinematic Spotlight carousel and Top 10 row at the top of the Home page.
+                        </div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="chkForceDarkTheme" type="checkbox" is="emby-checkbox" />
+                            <span>Force Dark Theme</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">
+                            Locks web clients to Jellyfin's dark theme so Nova's glass and pitch-black accents render consistently.
+                        </div>
+                    </div>
+
+                    <div style="margin-top:1.5em;">
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            (function () {
+                var NovaPluginId = '7d9a3e54-8b2c-4f1e-9a6d-3c5e8f1b2d4a';
+
+                document.querySelector('#NovaConfigPage').addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(NovaPluginId).then(function (config) {
+                        document.querySelector('#chkEnabled').checked = config.Enabled !== false;
+                        document.querySelector('#chkEnableSpotlight').checked = config.EnableSpotlight !== false;
+                        document.querySelector('#chkForceDarkTheme').checked = config.ForceDarkTheme !== false;
+                        Dashboard.hideLoadingMsg();
+                    }).catch(function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                });
+
+                document.querySelector('#NovaConfigForm').addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(NovaPluginId).then(function (config) {
+                        config.Enabled = document.querySelector('#chkEnabled').checked;
+                        config.EnableSpotlight = document.querySelector('#chkEnableSpotlight').checked;
+                        config.ForceDarkTheme = document.querySelector('#chkForceDarkTheme').checked;
+                        ApiClient.updatePluginConfiguration(NovaPluginId, config).then(function (result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        });
+                    }).catch(function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                    return false;
+                });
+            })();
+        </script>
+    </div>
+</body>
+</html>

@@ -1,0 +1,12 @@
+[
+  {
+    "guid": "7d9a3e54-8b2c-4f1e-9a6d-3c5e8f1b2d4a",
+    "name": "Jellyfin Nova",
+    "description": "Cinematic dark UI theme for Jellyfin with Spotlight Hero Banner, Top 10 row, enhanced Media Details, Library Hero Banners, and custom Video Player OSD.",
+    "overview": "Cinematic dark UI theme, Spotlight Hero & Top 10 banner, enhanced Details, and custom Video Player for Jellyfin.",
+    "owner": "moolgx53-cpu",
+    "category": "General",
+    "imageUrl": "https://raw.githubusercontent.com/moolgx53-cpu/jellyfin-nova/main/plugin/icon.png",
+    "versions": []
+  }
+]

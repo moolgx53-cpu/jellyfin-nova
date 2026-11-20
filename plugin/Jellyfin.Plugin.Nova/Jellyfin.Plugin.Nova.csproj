@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>Jellyfin.Plugin.Nova</RootNamespace>
+    <AssemblyName>Jellyfin.Plugin.Nova</AssemblyName>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.0.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Jellyfin.Controller" Version="10.11.*">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="Jellyfin.Model" Version="10.11.*">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Configuration\configPage.html" LogicalName="Jellyfin.Plugin.Nova.Configuration.configPage.html" />
+    <EmbeddedResource Include="Assets\nova-boot.js" LogicalName="Jellyfin.Plugin.Nova.Assets.nova-boot.js" />
+    <EmbeddedResource Include="..\..\abyss.css" LogicalName="Jellyfin.Plugin.Nova.Assets.abyss.css" />
+    <EmbeddedResource Include="..\..\scripts\spotlight\library-banner.css" LogicalName="Jellyfin.Plugin.Nova.Assets.library-banner.css" />
+    <EmbeddedResource Include="..\..\scripts\spotlight\library-banner.js" LogicalName="Jellyfin.Plugin.Nova.Assets.library-banner.js" />
+    <EmbeddedResource Include="..\..\scripts\spotlight\movie-details.css" LogicalName="Jellyfin.Plugin.Nova.Assets.movie-details.css" />
+    <EmbeddedResource Include="..\..\scripts\spotlight\movie-details.js" LogicalName="Jellyfin.Plugin.Nova.Assets.movie-details.js" />
+    <EmbeddedResource Include="..\..\scripts\spotlight\abyss-state.js" LogicalName="Jellyfin.Plugin.Nova.Assets.abyss-state.js" />
+    <EmbeddedResource Include="..\..\scripts\spotlight\spotlight.html" LogicalName="Jellyfin.Plugin.Nova.Assets.spotlight.html" />
+    <EmbeddedResource Include="..\..\scripts\spotlight\spotlight.css" LogicalName="Jellyfin.Plugin.Nova.Assets.spotlight.css" />
+  </ItemGroup>
+
+</Project>

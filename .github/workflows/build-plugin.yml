@@ -1,0 +1,199 @@
+name: Build & Publish Jellyfin Nova Plugin
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'abyss.css'
+      - 'scripts/spotlight/**'
+      - 'plugin/**'
+      - '.github/workflows/build-plugin.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional 4-part version (e.g. 1.0.1.0). Leave empty to use plugin/version.txt'
+        required: false
+        default: ''
+      changelog:
+        description: 'Release changelog note'
+        required: false
+        default: 'Updated Jellyfin Nova UI theme plugin.'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 9.0
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Determine plugin version
+        id: ver
+        shell: bash
+        run: |
+          INPUT_VER="${{ github.event.inputs.version }}"
+          if [ -n "$INPUT_VER" ]; then
+            VERSION="$INPUT_VER"
+          else
+            VERSION=$(tr -d ' \r\n' < plugin/version.txt)
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "Building Jellyfin Nova v$VERSION"
+
+      - name: Build Jellyfin.Plugin.Nova
+        run: |
+          dotnet publish plugin/Jellyfin.Plugin.Nova/Jellyfin.Plugin.Nova.csproj \
+            -c Release \
+            -p:Version=${{ steps.ver.outputs.version }} \
+            -p:AssemblyVersion=${{ steps.ver.outputs.version }} \
+            -p:FileVersion=${{ steps.ver.outputs.version }} \
+            -o publish
+
+      - name: Package plugin zip & compute MD5 checksum
+        id: pkg
+        shell: bash
+        run: |
+          mkdir -p dist/pkg
+          cp publish/Jellyfin.Plugin.Nova.dll dist/pkg/
+          if [ -f plugin/icon.png ]; then
+            cp plugin/icon.png dist/pkg/icon.png
+          fi
+
+          cat > dist/pkg/meta.json << 'EOF'
+          {
+            "category": "General",
+            "changelog": "__CHANGELOG__",
+            "description": "Cinematic dark UI theme for Jellyfin with Spotlight Hero Banner, Top 10 row, enhanced Media Details, Library Hero Banners, and custom Video Player OSD.",
+            "guid": "7d9a3e54-8b2c-4f1e-9a6d-3c5e8f1b2d4a",
+            "name": "Jellyfin Nova",
+            "overview": "Cinematic dark UI theme, Spotlight Hero & Top 10 banner, enhanced Details, and custom Video Player for Jellyfin.",
+            "owner": "moolgx53-cpu",
+            "targetAbi": "10.11.0.0",
+            "timestamp": "__TIMESTAMP__",
+            "version": "__VERSION__"
+          }
+          EOF
+
+          python3 - << 'PY'
+          import os, json
+          changelog = os.environ.get("RELEASE_CHANGELOG") or "Jellyfin Nova UI theme release for Jellyfin 10.11+."
+          with open("dist/pkg/meta.json", "r", encoding="utf-8") as f:
+              text = f.read()
+          text = text.replace("__VERSION__", os.environ["PLUGIN_VERSION"])
+          text = text.replace("__TIMESTAMP__", os.environ["PLUGIN_TIMESTAMP"])
+          text = text.replace("__CHANGELOG__", changelog.replace('"', '\\"'))
+          with open("dist/pkg/meta.json", "w", encoding="utf-8") as f:
+              f.write(text)
+          PY
+
+          ZIP_NAME="jellyfin-nova_${{ steps.ver.outputs.version }}.zip"
+          (cd dist/pkg && zip -r "../$ZIP_NAME" .)
+          CHECKSUM=$(md5sum "dist/$ZIP_NAME" | awk '{print $1}')
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          echo "zip_path=dist/$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+          echo "Created dist/$ZIP_NAME (MD5: $CHECKSUM)"
+        env:
+          PLUGIN_VERSION: ${{ steps.ver.outputs.version }}
+          PLUGIN_TIMESTAMP: ${{ steps.ver.outputs.timestamp }}
+          RELEASE_CHANGELOG: ${{ github.event.inputs.changelog }}
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          ZIP_PATH="${{ steps.pkg.outputs.zip_path }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP_PATH" --clobber
+          else
+            gh release create "$TAG" "$ZIP_PATH" \
+              --title "Jellyfin Nova v${{ steps.ver.outputs.version }}" \
+              --notes "Jellyfin Nova plugin release v${{ steps.ver.outputs.version }} for Jellyfin 10.11+."
+          fi
+
+      - name: Update manifest.json
+        env:
+          PLUGIN_VERSION: ${{ steps.ver.outputs.version }}
+          PLUGIN_TAG: ${{ steps.ver.outputs.tag }}
+          PLUGIN_TIMESTAMP: ${{ steps.ver.outputs.timestamp }}
+          PLUGIN_CHECKSUM: ${{ steps.pkg.outputs.checksum }}
+          ZIP_NAME: ${{ steps.pkg.outputs.zip_name }}
+          RELEASE_CHANGELOG: ${{ github.event.inputs.changelog }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - << 'PY'
+          import json, os
+
+          repo = os.environ["REPO"]
+          owner = repo.split("/")[0]
+          version = os.environ["PLUGIN_VERSION"]
+          tag = os.environ["PLUGIN_TAG"]
+          timestamp = os.environ["PLUGIN_TIMESTAMP"]
+          checksum = os.environ["PLUGIN_CHECKSUM"]
+          zip_name = os.environ["ZIP_NAME"]
+          changelog = os.environ.get("RELEASE_CHANGELOG") or f"Jellyfin Nova v{version} for Jellyfin 10.11+."
+
+          manifest_path = "manifest.json"
+          if os.path.exists(manifest_path):
+              with open(manifest_path, "r", encoding="utf-8") as f:
+                  manifest = json.load(f)
+          else:
+              manifest = []
+
+          plugin_guid = "7d9a3e54-8b2c-4f1e-9a6d-3c5e8f1b2d4a"
+          entry = next((p for p in manifest if p.get("guid") == plugin_guid), None)
+          if entry is None:
+              entry = {
+                  "guid": plugin_guid,
+                  "name": "Jellyfin Nova",
+                  "description": "Cinematic dark UI theme for Jellyfin with Spotlight Hero Banner, Top 10 row, enhanced Media Details, Library Hero Banners, and custom Video Player OSD.",
+                  "overview": "Cinematic dark UI theme, Spotlight Hero & Top 10 banner, enhanced Details, and custom Video Player for Jellyfin.",
+                  "owner": owner,
+                  "category": "General",
+                  "imageUrl": f"https://raw.githubusercontent.com/{repo}/main/plugin/icon.png",
+                  "versions": []
+              }
+              manifest.append(entry)
+
+          new_ver = {
+              "version": version,
+              "changelog": changelog,
+              "targetAbi": "10.11.0.0",
+              "sourceUrl": f"https://github.com/{repo}/releases/download/{tag}/{zip_name}",
+              "checksum": checksum,
+              "timestamp": timestamp
+          }
+
+          versions = [v for v in entry.get("versions", []) if v.get("version") != version]
+          versions.insert(0, new_ver)
+          entry["versions"] = versions
+          entry["imageUrl"] = f"https://raw.githubusercontent.com/{repo}/main/plugin/icon.png"
+
+          with open(manifest_path, "w", encoding="utf-8") as f:
+              json.dump(manifest, f, indent=2)
+              f.write("\n")
+          PY
+
+      - name: Commit updated manifest.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update manifest.json for v${{ steps.ver.outputs.version }} [skip ci]"
+            git push origin HEAD:main
+          fi

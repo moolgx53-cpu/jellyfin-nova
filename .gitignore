@@ -1,0 +1,7 @@
+setup.exe
+
+abyss-setup-*.exe
+bin/
+obj/
+publish/
+dist/

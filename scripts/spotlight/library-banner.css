@@ -1,0 +1,483 @@
+/* ==========================================================================
+   DYNAMIC LIBRARY ANIMATED MARQUEE HERO BANNER (COMPACT CINEMATIC EDITION)
+   ========================================================================== */
+
+.library-hero-banner {
+	position: relative;
+	width: 100%;
+	min-height: 360px;
+	height: 42vh;
+	max-height: 440px;
+	overflow: hidden;
+	background: #08080c;
+	margin-bottom: 20px;
+	border-radius: 0 0 24px 24px;
+	box-shadow: 0 15px 40px rgba(0, 0, 0, 0.85);
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	box-sizing: border-box;
+	-webkit-tap-highlight-color: transparent !important;
+	-webkit-user-select: none !important;
+	-moz-user-select: none !important;
+	user-select: none !important;
+}
+
+.library-hero-backdrop {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	inset: 0;
+	z-index: 1;
+	opacity: 0.45;
+	filter: blur(10px) scale(1.06);
+	transition: opacity 0.8s ease;
+}
+
+.library-hero-backdrop img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.library-hero-overlay {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	inset: 0;
+	z-index: 2;
+	background:
+		radial-gradient(ellipse at center, rgba(12, 12, 18, 0.15) 0%, rgba(8, 8, 12, 0.85) 75%, #08080c 100%),
+		linear-gradient(to bottom, rgba(8, 8, 12, 0.4) 0%, transparent 50%, #08080c 100%);
+	pointer-events: none;
+}
+
+.library-ambient-halo {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	width: 600px;
+	height: 260px;
+	border-radius: 50%;
+	background: radial-gradient(ellipse at center, rgba(229, 9, 20, 0.26) 0%, rgba(229, 9, 20, 0.08) 45%, rgba(229, 9, 20, 0) 72%);
+	z-index: 3;
+	pointer-events: none;
+}
+
+/* MARQUEE RUNWAY - SLIDES BEHIND TITLE */
+.library-marquee-wrap {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	inset: 0;
+	z-index: 4;
+	display: flex;
+	align-items: center;
+	width: 100%;
+	overflow: hidden;
+	padding: 5px 0;
+	pointer-events: none !important;
+}
+
+.library-marquee-wrap::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	inset: 0;
+	z-index: 5;
+	background: linear-gradient(to right, #08080c 0%, transparent 10%, transparent 90%, #08080c 100%);
+	pointer-events: none !important;
+}
+
+.library-marquee-track {
+	display: flex;
+	gap: 20px;
+	width: max-content;
+	animation: libraryMarquee 42s linear infinite;
+	will-change: transform;
+	transform: translate3d(0, 0, 0);
+	backface-visibility: hidden;
+	pointer-events: none !important;
+}
+
+.page.hide .library-marquee-track,
+.library-hero-banner.is-paused .library-marquee-track,
+body.abyss-has-expanded-card .library-marquee-track {
+	animation-play-state: paused !important;
+}
+
+@keyframes libraryMarquee {
+	0% {
+		transform: translate3d(0, 0, 0);
+	}
+
+	100% {
+		transform: translate3d(-50%, 0, 0);
+	}
+}
+
+.library-marquee-card {
+	position: relative;
+	width: 150px;
+	height: 218px;
+	flex-shrink: 0;
+	border-radius: 16px;
+	background: rgba(20, 20, 28, 0.75);
+	border: 1.5px solid rgba(255, 255, 255, 0.22);
+	box-shadow: 0 8px 20px rgba(0, 0, 0, 0.75);
+	pointer-events: none !important;
+	cursor: default !important;
+	user-select: none !important;
+}
+
+.library-marquee-card.rot-neg {
+	transform: rotate(-2.5deg);
+}
+
+.library-marquee-card.rot-pos {
+	transform: rotate(3deg);
+}
+
+.library-marquee-card img {
+	width: 100%;
+	height: 100%;
+	border-radius: 14.5px;
+	object-fit: cover;
+	display: block;
+	pointer-events: none !important;
+}
+
+/* TITLE FLOATING IN FRONT OF POSTERS */
+.library-hero-content {
+	position: relative;
+	z-index: 10;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	width: 100%;
+	max-width: 1000px;
+	padding: 0 20px;
+	box-sizing: border-box;
+	pointer-events: none !important;
+}
+
+.library-hero-title {
+	font-family: 'Cairo', 'Tajawal', 'Google Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	font-size: clamp(3.2rem, 7.5vw, 5.5rem);
+	font-weight: 900;
+	color: #ffffff;
+	letter-spacing: -0.02em;
+	line-height: 1.0;
+	margin: 0;
+	text-transform: uppercase;
+	text-shadow:
+		0 8px 50px rgba(0, 0, 0, 0.98),
+		0 4px 25px rgba(0, 0, 0, 0.95),
+		0 0 70px rgba(0, 0, 0, 0.9);
+}
+
+/* MOBILE COMPACT */
+@media (max-width: 768px) {
+	.library-hero-banner {
+		min-height: 280px;
+		height: 36vh;
+		max-height: 340px;
+		margin-bottom: 14px;
+	}
+
+	.library-hero-title {
+		font-size: 2.4rem;
+	}
+
+	.library-marquee-card {
+		width: 105px;
+		height: 152px;
+		border-radius: 12px;
+	}
+}
+
+/* ==========================================================================
+   MY MEDIA LIBRARIES COMPACT & RESPONSIVE 2-ROW GRID SYSTEM
+   ========================================================================== */
+
+.section0 .sectionTitleContainer,
+.homeSectionsContainer > .verticalSection:first-child .sectionTitleContainer {
+    display: flex !important;
+    justify-content: center !important;
+    text-align: center !important;
+}
+
+.section0 .sectionTitle,
+.homeSectionsContainer > .verticalSection:first-child .sectionTitle {
+    text-align: center !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+.section0 .itemsContainer,
+.homeSectionsContainer > .verticalSection:first-child .itemsContainer,
+div[data-type="smallFolder"] .itemsContainer,
+div[data-type="UserView"] .itemsContainer,
+.section0 .scrollSlider {
+    display: grid !important;
+    grid-template-rows: repeat(2, auto) !important;
+    grid-auto-flow: column !important;
+    grid-auto-columns: minmax(175px, 195px) !important;
+    justify-content: center !important;
+    gap: 14px 16px !important;
+    padding: 10px 3.3% 20px 3.3% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    white-space: normal !important;
+    transform: none !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+
+.section0 .itemsContainer::-webkit-scrollbar,
+.homeSectionsContainer > .verticalSection:first-child .itemsContainer::-webkit-scrollbar,
+div[data-type="smallFolder"] .itemsContainer::-webkit-scrollbar,
+div[data-type="UserView"] .itemsContainer::-webkit-scrollbar,
+.section0 .scrollSlider::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+
+.section0 .emby-scroller,
+.homeSectionsContainer > .verticalSection:first-child .emby-scroller,
+.section0 .emby-scroller-container {
+    overflow: visible !important;
+}
+
+.section0 .emby-scrollbuttons,
+.section0 .sectionTitleContainer .sectionTitleButton,
+.homeSectionsContainer > .verticalSection:first-child .emby-scrollbuttons {
+    display: none !important;
+}
+
+.section0 .card,
+.homeSectionsContainer > .verticalSection:first-child .card,
+.parentCategoryCard,
+.smallBackdropCard,
+div[data-type="smallFolder"] .card {
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    position: relative !important;
+    border-radius: 4px !important;
+    border: none !important;
+    outline: none !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+    background: transparent !important;
+    transition: transform 0.25s ease, box-shadow 0.25s ease !important;
+}
+
+.section0 .cardBox,
+.homeSectionsContainer > .verticalSection:first-child .cardBox,
+.parentCategoryCard .cardBox {
+    margin: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 4px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    outline: none !important;
+    background: transparent !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease !important;
+}
+
+.section0 .cardScalable,
+.homeSectionsContainer > .verticalSection:first-child .cardScalable,
+.parentCategoryCard .cardScalable {
+    aspect-ratio: 16 / 9 !important;
+    height: 100% !important;
+    min-height: 88px !important;
+    border-radius: 4px !important;
+    border: none !important;
+    outline: none !important;
+    overflow: hidden !important;
+    background: transparent !important;
+}
+
+.section0 .cardPadder,
+.homeSectionsContainer > .verticalSection:first-child .cardPadder {
+    display: none !important;
+}
+
+.section0 .cardImageContainer,
+.homeSectionsContainer > .verticalSection:first-child .cardImageContainer,
+.parentCategoryCard .cardImageContainer {
+    border-radius: 4px !important;
+    border: none !important;
+    outline: none !important;
+    overflow: hidden !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-color: transparent !important;
+    transition: transform 0.3s ease, filter 0.3s ease !important;
+}
+
+.section0 .cardImageContainer::after,
+.section0 .cardImageContainer::before,
+.section0 .cardBox::after,
+.section0 .cardBox::before,
+.section0 .cardScalable::after,
+.section0 .cardScalable::before,
+.parentCategoryCard .cardImageContainer::after,
+.parentCategoryCard .cardImageContainer::before,
+.parentCategoryCard .cardBox::after,
+.parentCategoryCard .cardBox::before {
+    display: none !important;
+    background: none !important;
+    opacity: 0 !important;
+}
+
+.section0 .cardOverlayContainer,
+.parentCategoryCard .cardOverlayContainer {
+    display: flex !important;
+    background: none !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.section0 .cardOverlayButton,
+.parentCategoryCard .cardOverlayButton,
+.section0 .btnCardMenu,
+.parentCategoryCard .btnCardMenu {
+    display: inline-flex !important;
+    background: none !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #ffffff !important;
+    opacity: 0.85 !important;
+    transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.2s ease !important;
+}
+
+.section0 .cardOverlayButton:hover,
+.parentCategoryCard .cardOverlayButton:hover,
+.section0 .btnCardMenu:hover,
+.parentCategoryCard .btnCardMenu:hover {
+    opacity: 1 !important;
+    background: rgba(255, 255, 255, 0.2) !important;
+    border-radius: 50% !important;
+}
+
+.section0 .cardText,
+.homeSectionsContainer > .verticalSection:first-child .cardText,
+.parentCategoryCard .cardText {
+    font-family: 'Google Sans', 'Cairo', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-size: 1.05rem !important;
+    font-weight: 800 !important;
+    color: #ffffff !important;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95), 0 0 12px rgba(0, 0, 0, 0.9) !important;
+    text-align: center !important;
+    letter-spacing: -0.01em !important;
+    transition: color 0.25s ease !important;
+}
+
+.section0 .card:hover,
+.homeSectionsContainer > .verticalSection:first-child .card:hover,
+.parentCategoryCard:hover {
+    transform: translateY(-3px) !important;
+}
+
+.section0 .card:hover .cardImageContainer,
+.homeSectionsContainer > .verticalSection:first-child .card:hover .cardImageContainer,
+.parentCategoryCard:hover .cardImageContainer {
+    transform: scale(1.04) !important;
+    filter: brightness(1.08) contrast(1.03) !important;
+}
+
+.section0 .card:hover .cardBox,
+.section0 .card:focus .cardBox,
+.homeSectionsContainer > .verticalSection:first-child .card:hover .cardBox,
+.parentCategoryCard:hover .cardBox {
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3) !important;
+    background: transparent !important;
+}
+
+@media (max-width: 768px) {
+    .section0 .itemsContainer,
+    .homeSectionsContainer > .verticalSection:first-child .itemsContainer,
+    div[data-type="smallFolder"] .itemsContainer,
+    div[data-type="UserView"] .itemsContainer,
+    .section0 .scrollSlider {
+        grid-auto-columns: calc((100% - 16px) / 3) !important;
+        gap: 8px 8px !important;
+        padding: 6px 12px 14px 12px !important;
+        justify-content: space-between !important;
+    }
+
+    .section0 .cardScalable,
+    .homeSectionsContainer > .verticalSection:first-child .cardScalable,
+    .parentCategoryCard .cardScalable {
+        min-height: 54px !important;
+        aspect-ratio: 16 / 9.5 !important;
+        border-radius: 4px !important;
+    }
+
+    .section0 .card,
+    .section0 .cardBox,
+    .parentCategoryCard {
+        border-radius: 4px !important;
+    }
+
+    .section0 .cardText,
+    .homeSectionsContainer > .verticalSection:first-child .cardText,
+    .parentCategoryCard .cardText {
+        font-size: 0.72rem !important;
+        padding: 0 2px !important;
+        letter-spacing: -0.02em !important;
+    }
+}
+
+@supports not (inset: 0) {
+    .library-marquee-track > .library-marquee-card + .library-marquee-card {
+        margin-left: 20px;
+    }
+
+    .section0 .cardScalable,
+    .homeSectionsContainer > .verticalSection:first-child .cardScalable,
+    .parentCategoryCard .cardScalable {
+        height: 106px !important;
+    }
+
+    .library-hero-backdrop {
+        filter: none !important;
+        -webkit-filter: none !important;
+        opacity: 0.32 !important;
+    }
+
+    .library-ambient-halo {
+        filter: none !important;
+        -webkit-filter: none !important;
+    }
+
+    .library-marquee-card {
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.65) !important;
+    }
+
+    .library-hero-title {
+        text-shadow: 0 4px 18px rgba(0, 0, 0, 0.95) !important;
+    }
+}
