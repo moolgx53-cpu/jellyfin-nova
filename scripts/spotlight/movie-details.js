@@ -7751,11 +7751,15 @@
 		card.classList.remove('abyss-card-expanded');
 
 		const resetCardDom = () => {
-			card.classList.remove('abyss-card-morph-active');
+			card.classList.remove('abyss-card-morph-active', 'abyss-card-grid-morph');
 			card.style.width = '';
+			card.style.height = '';
 			card.style.marginLeft = '';
 			if (cardBox) {
 				cardBox.style.width = '';
+				cardBox.style.left = '';
+				cardBox.style.top = '';
+				cardBox.style.margin = '';
 				cardBox.style.transform = '';
 			}
 			if (scalable) {
@@ -7774,8 +7778,10 @@
 		}
 
 		if (geom && scalable) {
-			card.style.width = `${geom.portraitCardWidth}px`;
-			card.style.marginLeft = '0px';
+			if (!geom.isGridWrap) {
+				card.style.width = `${geom.portraitCardWidth}px`;
+				card.style.marginLeft = '0px';
+			}
 			if (cardBox) {
 				cardBox.style.width = `${geom.portraitScalableWidth}px`;
 				cardBox.style.transform = 'translateX(0px)';
@@ -7835,11 +7841,30 @@
 			card._abyssCollapseCleanupTimer = null;
 		}
 
+		const container = card.closest('.itemsContainer');
+		const containerStyle = container ? window.getComputedStyle(container) : null;
+		const isGridWrap = Boolean(
+			container && (
+				container.classList.contains('vertical-wrap') ||
+				(containerStyle && (
+					containerStyle.flexWrap === 'wrap' ||
+					containerStyle.flexWrap === 'wrap-reverse' ||
+					containerStyle.display.includes('grid')
+				))
+			)
+		);
+
 		// Measure initial portrait dimensions once (before any style mutations)
+		const cardRect = card.getBoundingClientRect();
+		const boxRect = cardBox ? cardBox.getBoundingClientRect() : null;
 		const geom = card._abyssMorphGeom || {
 			portraitCardWidth: card.offsetWidth,
+			portraitCardHeight: cardRect.height,
 			portraitScalableWidth: scalable.offsetWidth,
-			portraitScalableHeight: scalable.offsetHeight
+			portraitScalableHeight: scalable.offsetHeight,
+			boxOffsetLeft: boxRect ? (boxRect.left - cardRect.left) : 0,
+			boxOffsetTop: boxRect ? (boxRect.top - cardRect.top) : 0,
+			isGridWrap
 		};
 		card._abyssMorphGeom = geom;
 
@@ -7851,18 +7876,29 @@
 		const targetCardWidth = targetScalableWidth + marginH;
 		const deltaWidth = Math.max(0, targetScalableWidth - geom.portraitScalableWidth);
 
-		const container = card.closest('.itemsContainer');
-		const isGridWrap = Boolean(container && container.classList.contains('vertical-wrap'));
 		const rect = scalable.getBoundingClientRect();
 		const viewportW = window.innerWidth;
 
 		// Lock explicit starting dimensions at t = 0 so transition starts from exact current pixels
 		card.classList.add('abyss-card-morph-active');
-		card.style.width = `${geom.portraitCardWidth}px`;
-		card.style.marginLeft = '0px';
-		if (cardBox) {
-			cardBox.style.width = `${geom.portraitScalableWidth}px`;
-			cardBox.style.transform = 'translateX(0px)';
+		if (geom.isGridWrap) {
+			// Take cardBox out of flex/grid flow so expanding to 16:9 NEVER shifts or wraps neighboring cards
+			card.classList.add('abyss-card-grid-morph');
+			card.style.height = `${geom.portraitCardHeight}px`;
+			if (cardBox) {
+				cardBox.style.left = `${geom.boxOffsetLeft}px`;
+				cardBox.style.top = `${geom.boxOffsetTop}px`;
+				cardBox.style.margin = '0';
+				cardBox.style.width = `${geom.portraitScalableWidth}px`;
+				cardBox.style.transform = 'translateX(0px)';
+			}
+		} else {
+			card.style.width = `${geom.portraitCardWidth}px`;
+			card.style.marginLeft = '0px';
+			if (cardBox) {
+				cardBox.style.width = `${geom.portraitScalableWidth}px`;
+				cardBox.style.transform = 'translateX(0px)';
+			}
 		}
 		scalable.style.width = `${geom.portraitScalableWidth}px`;
 		scalable.style.height = `${geom.portraitScalableHeight}px`;
@@ -7942,10 +7978,11 @@
 				cardBox.style.width = `${targetScalableWidth}px`;
 			}
 
-			const overflowRight = Math.max(0, (rect.left + targetScalableWidth) - (viewportW - 24));
+			const rightSafeEdge = geom.isGridWrap ? (viewportW - 44) : (viewportW - 24);
+			const overflowRight = Math.max(0, (rect.left + targetScalableWidth) - rightSafeEdge);
 			const maxLeftShift = Math.max(0, rect.left - 24);
 
-			if (!isGridWrap) {
+			if (!geom.isGridWrap) {
 				const clampedShift = Math.min(overflowRight, maxLeftShift, deltaWidth);
 				card.style.width = `${targetCardWidth}px`;
 				if (clampedShift > 0) {

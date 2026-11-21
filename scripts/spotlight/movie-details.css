@@ -5516,9 +5516,17 @@ body.is-mobile-device .abyss-grp-left .abyss-vol-slider-wrap {
 	position: relative !important;
 	z-index: 100 !important;
 	flex-shrink: 0 !important;
+	min-width: 0 !important;
 	contain: none !important;
 	overflow: visible !important;
 	transition: width 0.52s cubic-bezier(0.22, 1, 0.36, 1), margin-left 0.52s cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+.card.abyss-card-grid-morph,
+.card.abyss-card-grid-morph:not(.show-animation) {
+	z-index: 120 !important;
+	min-width: 0 !important;
+	transition: none !important;
 }
 
 .card.abyss-card-morph-active>.cardBox,
@@ -5529,6 +5537,12 @@ body.is-mobile-device .abyss-grp-left .abyss-vol-slider-wrap {
 	overflow: visible !important;
 	transform: translateX(0px);
 	transition: width 0.52s cubic-bezier(0.22, 1, 0.36, 1), transform 0.52s cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+.card.abyss-card-grid-morph>.cardBox,
+.card.abyss-card-grid-morph:focus>.cardBox {
+	position: absolute !important;
+	z-index: 120 !important;
 }
 
 .card.abyss-card-morph-active .cardScalable {
