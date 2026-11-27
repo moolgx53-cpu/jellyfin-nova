@@ -112,6 +112,45 @@
 		(async () => {
 			const $ = id => document.getElementById(id);
 
+			const novaCfg = (() => {
+				try {
+					return window.top?.__NOVA_CONFIG__ || window.parent?.__NOVA_CONFIG__ || window.__NOVA_CONFIG__ || {};
+				} catch {
+					return window.__NOVA_CONFIG__ || {};
+				}
+			})();
+
+			const isNovaLite = (() => {
+				try {
+					return Boolean(novaCfg.isLiteMode || window.top?.document?.documentElement?.classList?.contains('nova-lite-mode'));
+				} catch {
+					return Boolean(novaCfg.isLiteMode);
+				}
+			})();
+
+			(() => {
+				try {
+					const rawHex = String(novaCfg.accentColor || '').trim().toLowerCase();
+					const accent = /^#[0-9a-f]{6}$/.test(rawHex) ? rawHex : '#00d26a';
+					const r = parseInt(accent.slice(1, 3), 16);
+					const g = parseInt(accent.slice(3, 5), 16);
+					const b = parseInt(accent.slice(5, 7), 16);
+					document.documentElement.style.setProperty('--nova-accent', accent);
+					document.documentElement.style.setProperty('--nova-accent-rgb', `${r}, ${g}, ${b}`);
+					if (isNovaLite) {
+						document.documentElement.classList.add('nova-lite-mode');
+					}
+					if (accent !== '#00d26a') {
+						const st = document.createElement('style');
+						st.id = 'spotlight-nova-accent-style';
+						st.textContent =
+							`#progress-bar, .showcase-hover-timer-fill { background: var(--nova-accent) !important; background-color: var(--nova-accent) !important; }\n` +
+							`.dot-active { background: var(--nova-accent) !important; }\n`;
+						document.head.appendChild(st);
+					}
+				} catch (e) { }
+			})();
+
 			function getBaseUrl() {
 				try {
 					const loc = window.top.location;
@@ -164,7 +203,7 @@
 
 			function startZoom(imgEl, durationMs, fromScale, toScale) {
 				if (!imgEl) return;
-				if (isLegacyWebView) {
+				if (isLegacyWebView || isNovaLite) {
 					imgEl.style.transition = 'opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1)';
 					imgEl.style.transform = 'translate3d(0, 0, 0)';
 					return;
@@ -196,6 +235,84 @@
 				let items = [];
 				const api = window.parent?.ApiClient || window.top?.ApiClient || window.ApiClient;
 				const uid = userId || (api && typeof api.getCurrentUserId === 'function' ? api.getCurrentUserId() : api?._currentUserId) || '';
+				const spotlightSource = String(novaCfg.spotlightSource || 'latest').toLowerCase();
+				const spotlightCollectionId = String(novaCfg.spotlightCollectionId || '').trim();
+
+				const fetchByQuery = async (apiOpts, userHttpPath, globalHttpPath, sourceTag) => {
+					let out = [];
+					if (api && typeof api.getItems === 'function') {
+						try {
+							const d = await api.getItems(uid || undefined, apiOpts);
+							const raw = Array.isArray(d) ? d : (d?.Items || []);
+							if (raw.length) out = raw.map(i => ({ ...i, _source: sourceTag }));
+						} catch (e) { }
+					}
+					if (out.length === 0 && uid && userHttpPath) {
+						try {
+							const res = await fetch(`${base}${userHttpPath}`, { headers });
+							if (res.ok) {
+								const data = await res.json();
+								const raw = Array.isArray(data) ? data : (data?.Items || []);
+								if (raw.length) out = raw.map(i => ({ ...i, _source: sourceTag }));
+							}
+						} catch (e) { }
+					}
+					if (out.length === 0 && globalHttpPath) {
+						try {
+							const res = await fetch(`${base}${globalHttpPath}`, { headers });
+							if (res.ok) {
+								const data = await res.json();
+								const raw = Array.isArray(data) ? data : (data?.Items || []);
+								if (raw.length) out = raw.map(i => ({ ...i, _source: sourceTag }));
+							}
+						} catch (e) { }
+					}
+					return out;
+				};
+
+				if (spotlightSource === 'collection' && spotlightCollectionId) {
+					items = await fetchByQuery(
+						{
+							ParentId: spotlightCollectionId,
+							Limit: 12,
+							Recursive: true,
+							IncludeItemTypes: 'Movie,Series',
+							Fields: FIELDS
+						},
+						`/Users/${uid}/Items?ParentId=${encodeURIComponent(spotlightCollectionId)}&Limit=12&Recursive=true&IncludeItemTypes=Movie,Series&Fields=${FIELDS}`,
+						`/Items?ParentId=${encodeURIComponent(spotlightCollectionId)}&Limit=12&Recursive=true&IncludeItemTypes=Movie,Series&Fields=${FIELDS}`,
+						'collection'
+					);
+				} else if (spotlightSource === 'random') {
+					items = await fetchByQuery(
+						{
+							Limit: 10,
+							Recursive: true,
+							IncludeItemTypes: 'Movie,Series',
+							SortBy: 'Random',
+							Fields: FIELDS
+						},
+						`/Users/${uid}/Items?Limit=10&Recursive=true&IncludeItemTypes=Movie,Series&SortBy=Random&Fields=${FIELDS}`,
+						`/Items?Limit=10&Recursive=true&IncludeItemTypes=Movie,Series&SortBy=Random&Fields=${FIELDS}`,
+						'random'
+					);
+				} else if (spotlightSource === 'toprated') {
+					items = await fetchByQuery(
+						{
+							Limit: 10,
+							Recursive: true,
+							IncludeItemTypes: 'Movie,Series',
+							SortBy: 'CommunityRating,DateCreated',
+							SortOrder: 'Descending',
+							Fields: FIELDS
+						},
+						`/Users/${uid}/Items?Limit=10&Recursive=true&IncludeItemTypes=Movie,Series&SortBy=CommunityRating,DateCreated&SortOrder=Descending&Fields=${FIELDS}`,
+						`/Items?Limit=10&Recursive=true&IncludeItemTypes=Movie,Series&SortBy=CommunityRating,DateCreated&SortOrder=Descending&Fields=${FIELDS}`,
+						'toprated'
+					);
+				}
+
+				if (items.length > 0) return items;
 
 				// 1. Try ApiClient.getItems for Latest added
 				if (api && typeof api.getItems === 'function') {
@@ -870,6 +987,7 @@
 			}
 
 			function startShowcaseCardHover(card, item) {
+				if (novaCfg.enableHoverTrailers === false || isNovaLite) return;
 				if (!card || !card.classList.contains('is-center')) return;
 				clearShowcaseHoverTimers();
 				if (activeShowcaseExpandedCard === card) return;
@@ -1486,6 +1604,11 @@
 			}
 
 			async function initTop10Row(heroItems = []) {
+				const topContainer = $('top10-container');
+				if (novaCfg.enableTop10Row === false) {
+					if (topContainer) topContainer.style.display = 'none';
+					return;
+				}
 				const row = $('top10-row');
 				if (!row) return;
 				row.innerHTML = '';

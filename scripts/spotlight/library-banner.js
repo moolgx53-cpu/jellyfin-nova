@@ -3,6 +3,7 @@
 
 	if (window.__abyssLibraryBannerLoaded) return;
 	window.__abyssLibraryBannerLoaded = true;
+	if (window.__NOVA_CONFIG__ && window.__NOVA_CONFIG__.enableLibraryBanner === false) return;
 
 	let cachedUserViews = null;
 	let isRendering = false;

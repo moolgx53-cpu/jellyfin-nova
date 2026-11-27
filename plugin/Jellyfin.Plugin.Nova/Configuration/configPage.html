@@ -5,7 +5,122 @@
     <title>Jellyfin Nova</title>
 </head>
 <body>
-    <div id="NovaConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+    <div id="NovaConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox,emby-select">
+        <style>
+            .nova-cfg-card {
+                background: rgba(255, 255, 255, 0.04);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 14px;
+                padding: 1.25em 1.4em;
+                margin-bottom: 1.35em;
+            }
+            .nova-cfg-card h3 {
+                margin: 0 0 0.85em 0;
+                font-size: 1.08em;
+                font-weight: 600;
+                letter-spacing: 0.01em;
+            }
+            .nova-swatches {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                margin: 0.65em 0 1em 0;
+                align-items: center;
+            }
+            .nova-color-swatch {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                border: 2px solid rgba(255, 255, 255, 0.25);
+                cursor: pointer;
+                padding: 0;
+                transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+                outline: none;
+            }
+            .nova-color-swatch:hover {
+                transform: scale(1.12);
+            }
+            .nova-color-swatch.is-active {
+                border-color: #ffffff;
+                transform: scale(1.14);
+                box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25);
+            }
+            .nova-color-custom-row {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 12px;
+                margin-bottom: 1em;
+            }
+            #inpAccentColor {
+                width: 44px;
+                height: 36px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
+                background: transparent;
+                cursor: pointer;
+                padding: 2px;
+            }
+            #inpAccentHex {
+                width: 110px;
+                font-family: monospace;
+                text-transform: lowercase;
+            }
+            .nova-accent-preview {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                padding: 10px 14px;
+                border-radius: 12px;
+                background: #0f1015;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+            }
+            .nova-preview-track {
+                position: relative;
+                flex: 1;
+                height: 5px;
+                border-radius: 4px;
+                background: rgba(255, 255, 255, 0.2);
+            }
+            .nova-preview-fill {
+                width: 62%;
+                height: 100%;
+                border-radius: 4px;
+                background: #00d26a;
+            }
+            .nova-preview-knob {
+                position: absolute;
+                left: 62%;
+                top: 50%;
+                width: 13px;
+                height: 13px;
+                border-radius: 50%;
+                background: #00d26a;
+                border: 2px solid #ffffff;
+                transform: translate(-50%, -50%);
+                box-shadow: 0 0 10px #00d26a;
+            }
+            .nova-preview-badge {
+                padding: 4px 10px;
+                border-radius: 999px;
+                font-size: 12px;
+                font-weight: 600;
+                background: rgba(0, 210, 106, 0.18);
+                border: 1px solid rgba(0, 210, 106, 0.45);
+                color: #00d26a;
+                white-space: nowrap;
+            }
+            .nova-cfg-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+                margin-top: 1.5em;
+            }
+            .nova-cfg-actions .emby-button {
+                flex: 1 1 200px;
+            }
+        </style>
+
         <div data-role="content">
             <div class="content-primary">
                 <form id="NovaConfigForm">
@@ -14,42 +129,176 @@
                     </div>
 
                     <p style="opacity:0.8;margin-bottom:1.5em;">
-                        Configure the Jellyfin Nova cinematic UI theme. Changes take effect on the next page refresh (no server restart required).
+                        Configure the Jellyfin Nova cinematic UI theme, accent color, Spotlight source, feature modules, and performance mode. Changes take effect on the next page refresh (no server restart required).
                     </p>
 
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label class="emby-checkbox-label">
-                            <input id="chkEnabled" type="checkbox" is="emby-checkbox" />
-                            <span>Enable Jellyfin Nova Theme</span>
-                        </label>
-                        <div class="fieldDescription checkboxFieldDescription">
-                            Injects the Nova stylesheet, details hero banner, library banners, and custom video player OSD into Jellyfin Web, Mobile Apps, and Jellyfin Media Player.
+                    <div class="nova-cfg-card">
+                        <h3>General</h3>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chkEnabled" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Jellyfin Nova Theme</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                Injects the Nova stylesheet, details hero banner, library banners, and custom video player OSD into Jellyfin Web, Mobile Apps, and Jellyfin Media Player.
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chkForceDarkTheme" type="checkbox" is="emby-checkbox" />
+                                <span>Force Dark Theme</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                Locks web clients to Jellyfin's dark theme so Nova's glass and pitch-black accents render consistently.
+                            </div>
                         </div>
                     </div>
 
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label class="emby-checkbox-label">
-                            <input id="chkEnableSpotlight" type="checkbox" is="emby-checkbox" />
-                            <span>Enable Home Spotlight &amp; Top 10 Banner</span>
-                        </label>
-                        <div class="fieldDescription checkboxFieldDescription">
-                            Displays the cinematic Spotlight carousel and Top 10 row at the top of the Home page.
+                    <div class="nova-cfg-card">
+                        <h3>Accent Color</h3>
+                        <div class="fieldDescription" style="margin-bottom:0.5em;">
+                            Customize the highlight &amp; seekbar accent color across the custom video player OSD, HUD bars, Spotlight progress, and media progress indicators.
+                        </div>
+
+                        <div class="nova-swatches" id="novaColorSwatches">
+                            <button type="button" class="nova-color-swatch" data-color="#00d26a" title="Emerald (Default)" style="background:#00d26a;"></button>
+                            <button type="button" class="nova-color-swatch" data-color="#0284c7" title="Ocean Blue" style="background:#0284c7;"></button>
+                            <button type="button" class="nova-color-swatch" data-color="#e50914" title="Netflix Red" style="background:#e50914;"></button>
+                            <button type="button" class="nova-color-swatch" data-color="#8b5cf6" title="Royal Purple" style="background:#8b5cf6;"></button>
+                            <button type="button" class="nova-color-swatch" data-color="#f59e0b" title="Gold Amber" style="background:#f59e0b;"></button>
+                            <button type="button" class="nova-color-swatch" data-color="#ec4899" title="Rose Pink" style="background:#ec4899;"></button>
+                            <button type="button" class="nova-color-swatch" data-color="#f5f5f7" title="Clean White" style="background:#f5f5f7;"></button>
+                        </div>
+
+                        <div class="nova-color-custom-row">
+                            <label for="inpAccentColor" style="margin:0;opacity:0.85;">Custom Color:</label>
+                            <input id="inpAccentColor" type="color" value="#00d26a" aria-label="Accent color picker" />
+                            <input id="inpAccentHex" type="text" is="emby-input" maxlength="7" value="#00d26a" aria-label="Accent hex code" />
+                        </div>
+
+                        <div class="nova-accent-preview" id="novaAccentPreview">
+                            <span class="nova-preview-badge" id="novaPreviewBadge">Nova OSD</span>
+                            <div class="nova-preview-track">
+                                <div class="nova-preview-fill" id="novaPreviewFill"></div>
+                                <div class="nova-preview-knob" id="novaPreviewKnob"></div>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label class="emby-checkbox-label">
-                            <input id="chkForceDarkTheme" type="checkbox" is="emby-checkbox" />
-                            <span>Force Dark Theme</span>
-                        </label>
-                        <div class="fieldDescription checkboxFieldDescription">
-                            Locks web clients to Jellyfin's dark theme so Nova's glass and pitch-black accents render consistently.
+                    <div class="nova-cfg-card">
+                        <h3>Feature Modules</h3>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chkEnableSpotlight" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Home Spotlight Banner</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                Displays the cinematic Spotlight hero carousel at the top of the Home page.
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chkEnableTop10Row" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Top 10 Row</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                Displays the Top Movies &amp; Shows Today row beneath the Spotlight hero banner.
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chkEnableHoverTrailers" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Hover Card Trailers</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                Morphs portrait movie/show cards and Spotlight showcase cards into 16:9 trailer previews on hover.
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chkEnableLibraryBanner" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Library Hero Banner</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                Shows the cinematic rotating backdrop/marquee hero banner at the top of Movies, TV, and Music libraries.
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chkEnableCustomVideoOsd" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Custom Video Player OSD</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                Uses Nova's custom floating OSD bar and gesture controls. Turn off to use Jellyfin's native player controls.
+                            </div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="chkEnableHeroThemeVideo" type="checkbox" is="emby-checkbox" />
+                                <span>Enable Hero Theme Video on Details</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">
+                                Plays local backdrop theme videos or trailers automatically in the background of item details pages.
+                            </div>
                         </div>
                     </div>
 
-                    <div style="margin-top:1.5em;">
-                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                    <div class="nova-cfg-card">
+                        <h3>Spotlight Source &amp; Performance</h3>
+
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="selSpotlightSource">Spotlight Content Source</label>
+                            <select is="emby-select" id="selSpotlightSource" class="emby-select-withcolor emby-select">
+                                <option value="latest">Latest Added (Default)</option>
+                                <option value="random">Random Discovery from Library</option>
+                                <option value="toprated">Highest Rated (Community Rating)</option>
+                                <option value="collection">Specific Collection / Playlist</option>
+                            </select>
+                            <div class="fieldDescription">
+                                Controls which movies and shows populate the Home Spotlight carousel.
+                            </div>
+                        </div>
+
+                        <div id="novaCollectionWrap" style="display:none;margin-top:0.75em;">
+                            <div class="selectContainer">
+                                <label class="selectLabel" for="selSpotlightCollection">Select Collection or Playlist</label>
+                                <select is="emby-select" id="selSpotlightCollection" class="emby-select-withcolor emby-select">
+                                    <option value="">-- Loading Collections &amp; Playlists --</option>
+                                </select>
+                            </div>
+                            <div class="inputContainer" style="margin-top:0.5em;">
+                                <label class="inputLabel inputLabelUnfocused" for="inpSpotlightCollectionId">Collection / Playlist ID (Optional manual override)</label>
+                                <input id="inpSpotlightCollectionId" type="text" is="emby-input" placeholder="e.g. a1b2c3d4e5f6..." />
+                            </div>
+                        </div>
+
+                        <div class="selectContainer" style="margin-top:0.9em;">
+                            <label class="selectLabel" for="selPerformanceMode">Performance / Lite Mode</label>
+                            <select is="emby-select" id="selPerformanceMode" class="emby-select-withcolor emby-select">
+                                <option value="off">Off (Full Cinematic Experience)</option>
+                                <option value="auto">Auto (Smart TVs &amp; Low-Power Devices)</option>
+                                <option value="on">On (Always Lite Mode)</option>
+                            </select>
+                            <div class="fieldDescription">
+                                Lite Mode disables heavy blur effects, Ken Burns zoom, background theme videos, marquee scrolling, and hover trailer previews to keep low-power Smart TVs and mobile devices silky smooth.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="nova-cfg-actions">
+                        <button is="emby-button" type="submit" class="raised button-submit emby-button">
                             <span>Save</span>
+                        </button>
+                        <button is="emby-button" type="button" id="btnNovaResetDefaults" class="raised emby-button">
+                            <span>Reset to Defaults</span>
                         </button>
                     </div>
                 </form>
@@ -59,13 +308,192 @@
         <script type="text/javascript">
             (function () {
                 var NovaPluginId = '7d9a3e54-8b2c-4f1e-9a6d-3c5e8f1b2d4a';
+                var DEFAULT_ACCENT = '#00d26a';
+
+                function normalizeHex(val) {
+                    var str = String(val || '').trim().toLowerCase();
+                    if (/^#[0-9a-f]{6}$/.test(str)) return str;
+                    if (/^[0-9a-f]{6}$/.test(str)) return '#' + str;
+                    return DEFAULT_ACCENT;
+                }
+
+                function hexToRgb(hex) {
+                    var clean = normalizeHex(hex).slice(1);
+                    return [
+                        parseInt(clean.slice(0, 2), 16),
+                        parseInt(clean.slice(2, 4), 16),
+                        parseInt(clean.slice(4, 6), 16)
+                    ];
+                }
+
+                function updateAccentUI(hex) {
+                    var normalized = normalizeHex(hex);
+                    var colorInput = document.querySelector('#inpAccentColor');
+                    var hexInput = document.querySelector('#inpAccentHex');
+                    var fill = document.querySelector('#novaPreviewFill');
+                    var knob = document.querySelector('#novaPreviewKnob');
+                    var badge = document.querySelector('#novaPreviewBadge');
+                    if (colorInput) colorInput.value = normalized;
+                    if (hexInput && document.activeElement !== hexInput) hexInput.value = normalized;
+
+                    var rgb = hexToRgb(normalized);
+                    if (fill) fill.style.background = normalized;
+                    if (knob) {
+                        knob.style.background = normalized;
+                        knob.style.boxShadow = '0 0 10px ' + normalized;
+                    }
+                    if (badge) {
+                        badge.style.color = normalized;
+                        badge.style.background = 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.18)';
+                        badge.style.borderColor = 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.45)';
+                    }
+
+                    var swatches = document.querySelectorAll('.nova-color-swatch');
+                    for (var i = 0; i < swatches.length; i++) {
+                        var sw = swatches[i];
+                        var swColor = normalizeHex(sw.getAttribute('data-color'));
+                        sw.classList.toggle('is-active', swColor === normalized);
+                    }
+                }
+
+                function toggleCollectionWrap() {
+                    var srcSel = document.querySelector('#selSpotlightSource');
+                    var wrap = document.querySelector('#novaCollectionWrap');
+                    if (srcSel && wrap) {
+                        wrap.style.display = srcSel.value === 'collection' ? 'block' : 'none';
+                    }
+                }
+
+                function loadCollectionsDropdown(selectedId) {
+                    var sel = document.querySelector('#selSpotlightCollection');
+                    if (!sel || !window.ApiClient) return;
+                    var uid = typeof ApiClient.getCurrentUserId === 'function' ? ApiClient.getCurrentUserId() : '';
+                    if (!uid || typeof ApiClient.getItems !== 'function') {
+                        sel.innerHTML = '<option value="">-- Enter Collection ID below --</option>';
+                        return;
+                    }
+                    ApiClient.getItems(uid, {
+                        IncludeItemTypes: 'BoxSet,Playlist',
+                        Recursive: true,
+                        SortBy: 'SortName',
+                        SortOrder: 'Ascending'
+                    }).then(function (res) {
+                        var items = (res && res.Items) || [];
+                        var html = '<option value="">-- Select a Collection or Playlist --</option>';
+                        for (var i = 0; i < items.length; i++) {
+                            var it = items[i];
+                            var label = (it.Name || it.Id) + (it.Type === 'Playlist' ? ' [Playlist]' : ' [Collection]');
+                            var safeName = String(label).replace(/[&<>"']/g, function (c) {
+                                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                            });
+                            html += '<option value="' + String(it.Id || '') + '">' + safeName + '</option>';
+                        }
+                        sel.innerHTML = html;
+                        if (selectedId) {
+                            sel.value = selectedId;
+                        }
+                    }).catch(function () {
+                        sel.innerHTML = '<option value="">-- Could not load collections --</option>';
+                    });
+                }
+
+                function applyFormValues(cfg) {
+                    document.querySelector('#chkEnabled').checked = cfg.Enabled !== false;
+                    document.querySelector('#chkForceDarkTheme').checked = cfg.ForceDarkTheme !== false;
+                    document.querySelector('#chkEnableSpotlight').checked = cfg.EnableSpotlight !== false;
+                    document.querySelector('#chkEnableTop10Row').checked = cfg.EnableTop10Row !== false;
+                    document.querySelector('#chkEnableHoverTrailers').checked = cfg.EnableHoverTrailers !== false;
+                    document.querySelector('#chkEnableLibraryBanner').checked = cfg.EnableLibraryBanner !== false;
+                    document.querySelector('#chkEnableCustomVideoOsd').checked = cfg.EnableCustomVideoOsd !== false;
+                    document.querySelector('#chkEnableHeroThemeVideo').checked = cfg.EnableHeroThemeVideo !== false;
+
+                    var accent = normalizeHex(cfg.AccentColor || DEFAULT_ACCENT);
+                    document.querySelector('#inpAccentHex').value = accent;
+                    updateAccentUI(accent);
+
+                    var src = String(cfg.SpotlightSource || 'latest').toLowerCase();
+                    if (['latest', 'random', 'toprated', 'collection'].indexOf(src) === -1) src = 'latest';
+                    document.querySelector('#selSpotlightSource').value = src;
+
+                    var colId = String(cfg.SpotlightCollectionId || '').trim();
+                    document.querySelector('#inpSpotlightCollectionId').value = colId;
+
+                    var perf = String(cfg.PerformanceMode || 'off').toLowerCase();
+                    if (['off', 'auto', 'on'].indexOf(perf) === -1) perf = 'off';
+                    document.querySelector('#selPerformanceMode').value = perf;
+
+                    toggleCollectionWrap();
+                    loadCollectionsDropdown(colId);
+                }
+
+                var swatchesEl = document.querySelector('#novaColorSwatches');
+                if (swatchesEl) {
+                    swatchesEl.addEventListener('click', function (e) {
+                        var btn = e.target && e.target.closest ? e.target.closest('.nova-color-swatch') : null;
+                        if (!btn) return;
+                        var col = btn.getAttribute('data-color');
+                        if (col) updateAccentUI(col);
+                    });
+                }
+
+                var colorPicker = document.querySelector('#inpAccentColor');
+                if (colorPicker) {
+                    colorPicker.addEventListener('input', function () {
+                        updateAccentUI(colorPicker.value);
+                    });
+                }
+
+                var hexInput = document.querySelector('#inpAccentHex');
+                if (hexInput) {
+                    hexInput.addEventListener('input', function () {
+                        var raw = String(hexInput.value || '').trim();
+                        if (/^#?[0-9a-fA-F]{6}$/.test(raw)) {
+                            updateAccentUI(raw);
+                        }
+                    });
+                    hexInput.addEventListener('blur', function () {
+                        var norm = normalizeHex(hexInput.value);
+                        hexInput.value = norm;
+                        updateAccentUI(norm);
+                    });
+                }
+
+                var srcSelect = document.querySelector('#selSpotlightSource');
+                if (srcSelect) {
+                    srcSelect.addEventListener('change', toggleCollectionWrap);
+                }
+
+                var colSelect = document.querySelector('#selSpotlightCollection');
+                if (colSelect) {
+                    colSelect.addEventListener('change', function () {
+                        document.querySelector('#inpSpotlightCollectionId').value = colSelect.value || '';
+                    });
+                }
+
+                var resetBtn = document.querySelector('#btnNovaResetDefaults');
+                if (resetBtn) {
+                    resetBtn.addEventListener('click', function () {
+                        applyFormValues({
+                            Enabled: true,
+                            ForceDarkTheme: true,
+                            EnableSpotlight: true,
+                            EnableTop10Row: true,
+                            EnableHoverTrailers: true,
+                            EnableLibraryBanner: true,
+                            EnableCustomVideoOsd: true,
+                            EnableHeroThemeVideo: true,
+                            AccentColor: DEFAULT_ACCENT,
+                            SpotlightSource: 'latest',
+                            SpotlightCollectionId: '',
+                            PerformanceMode: 'off'
+                        });
+                    });
+                }
 
                 document.querySelector('#NovaConfigPage').addEventListener('pageshow', function () {
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(NovaPluginId).then(function (config) {
-                        document.querySelector('#chkEnabled').checked = config.Enabled !== false;
-                        document.querySelector('#chkEnableSpotlight').checked = config.EnableSpotlight !== false;
-                        document.querySelector('#chkForceDarkTheme').checked = config.ForceDarkTheme !== false;
+                        applyFormValues(config || {});
                         Dashboard.hideLoadingMsg();
                     }).catch(function () {
                         Dashboard.hideLoadingMsg();
@@ -76,9 +504,20 @@
                     e.preventDefault();
                     Dashboard.showLoadingMsg();
                     ApiClient.getPluginConfiguration(NovaPluginId).then(function (config) {
+                        config = config || {};
                         config.Enabled = document.querySelector('#chkEnabled').checked;
-                        config.EnableSpotlight = document.querySelector('#chkEnableSpotlight').checked;
                         config.ForceDarkTheme = document.querySelector('#chkForceDarkTheme').checked;
+                        config.EnableSpotlight = document.querySelector('#chkEnableSpotlight').checked;
+                        config.EnableTop10Row = document.querySelector('#chkEnableTop10Row').checked;
+                        config.EnableHoverTrailers = document.querySelector('#chkEnableHoverTrailers').checked;
+                        config.EnableLibraryBanner = document.querySelector('#chkEnableLibraryBanner').checked;
+                        config.EnableCustomVideoOsd = document.querySelector('#chkEnableCustomVideoOsd').checked;
+                        config.EnableHeroThemeVideo = document.querySelector('#chkEnableHeroThemeVideo').checked;
+                        config.AccentColor = normalizeHex(document.querySelector('#inpAccentHex').value || document.querySelector('#inpAccentColor').value);
+                        config.SpotlightSource = document.querySelector('#selSpotlightSource').value || 'latest';
+                        config.SpotlightCollectionId = String(document.querySelector('#inpSpotlightCollectionId').value || document.querySelector('#selSpotlightCollection').value || '').trim();
+                        config.PerformanceMode = document.querySelector('#selPerformanceMode').value || 'off';
+
                         ApiClient.updatePluginConfiguration(NovaPluginId, config).then(function (result) {
                             Dashboard.processPluginConfigurationUpdateResult(result);
                         });

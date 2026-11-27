@@ -7,6 +7,14 @@
 	let enhanceSeq = 0;
 	const itemCache = {};
 
+	function getNovaCfg() {
+		return window.__NOVA_CONFIG__ || {};
+	}
+
+	function isNovaLiteMode() {
+		return Boolean(getNovaCfg().isLiteMode || document.documentElement.classList.contains('nova-lite-mode'));
+	}
+
 	function lruSetObj(obj, key, val, max = 100) {
 		if (!obj || !key) return;
 		if (Object.prototype.hasOwnProperty.call(obj, key)) delete obj[key];
@@ -1375,6 +1383,7 @@
 	}
 
 	function initHeroThemeVideo(customWrap, themeVideoItem, item) {
+		if (getNovaCfg().enableHeroThemeVideo === false || isNovaLiteMode()) return;
 		if (!customWrap || !customWrap.isConnected || !themeVideoItem) return;
 		if (isVideoOsdPageActive() || document.querySelector('.abyss-trailer-player-overlay')) return;
 		cleanupNativeBackgroundThemePlayer();
@@ -6687,6 +6696,10 @@
 			return;
 		}
 
+		if (getNovaCfg().enableCustomVideoOsd === false) {
+			return;
+		}
+
 		// Ensure any background hero theme video/audio is completely stopped while the main player is active
 		if (document.querySelector('.hero-theme-video, .hero-theme-iframe') || isJmpMpvHeroPlaying) {
 			stopHeroThemeMedia();
@@ -8271,6 +8284,7 @@
 	}
 
 	async function expandCardWithTrailer(card, itemId) {
+		if (getNovaCfg().enableHoverTrailers === false || isNovaLiteMode()) return;
 		if (!card || !card.isConnected || hoveredCardEl !== card || document.hidden) return;
 		if (document.body.classList.contains('abyss-video-playing') || document.querySelector('#videoOsdPage:not(.hide)')) return;
 
@@ -8526,6 +8540,7 @@
 
 		document.addEventListener('pointerover', (e) => {
 			if (e.pointerType === 'touch') return;
+			if (getNovaCfg().enableHoverTrailers === false || isNovaLiteMode()) return;
 			const card = e.target?.closest?.('.card');
 			if (card === hoveredCardEl || (card && card === lastPointerCardEl)) return;
 			lastPointerCardEl = card || null;

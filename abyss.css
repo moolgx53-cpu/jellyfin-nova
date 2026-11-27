@@ -37,6 +37,8 @@
     /* Primary accent colour — used for highlights, active states, progress bars.
        Format: R, G, B (no rgb() wrapper) so opacity variants work cleanly. */
     --abyss-accent: 245, 245, 247;
+    --nova-accent: #00d26a;
+    --nova-accent-rgb: 0, 210, 106;
 
     /* Corner rounding applied globally */
     --abyss-radius: 12px;
@@ -1300,7 +1302,7 @@ body.layout-mobile.abyss-osd-hidden .skinHeader,
     left: 0 !important;
     top: 0 !important;
     height: 100% !important;
-    background: #00d26a !important;
+    background: var(--nova-accent, #00d26a) !important;
     border-radius: 4px !important;
     pointer-events: none !important;
 }
@@ -1309,12 +1311,12 @@ body.layout-mobile.abyss-osd-hidden .skinHeader,
     position: absolute !important;
     width: 12px !important;
     height: 12px !important;
-    background: #00d26a !important;
+    background: var(--nova-accent, #00d26a) !important;
     border: 2px solid #ffffff !important;
     border-radius: 50% !important;
     transform: translate(-50%, -50%) !important;
     top: 50% !important;
-    box-shadow: 0 0 10px #00d26a, 0 0 4px #00d26a !important;
+    box-shadow: 0 0 10px var(--nova-accent, #00d26a), 0 0 4px var(--nova-accent, #00d26a) !important;
     pointer-events: none !important;
 }
 
@@ -1433,29 +1435,29 @@ body.layout-mobile.abyss-osd-hidden .skinHeader,
 }
 
 /* Conceal duplicate native OSD elements visually while keeping them live in DOM for programmatic interaction */
-#videoOsdPage .videoOsdBottom>*:not(.osdControls):not(.abyss-custom-osd-bar),
-.videoOsdBottom>*:not(.osdControls):not(.abyss-custom-osd-bar),
-#videoOsdPage .osdControls>*:not(.abyss-custom-osd-bar),
-.videoOsdBottom .osdControls>*:not(.abyss-custom-osd-bar),
-.videoOsdBottom .sliderContainer,
-.videoOsdBottom .videoOsdPositionContainer,
-.videoOsdBottom .osdMediaStatus,
-.videoOsdBottom .videoOsdVolumeSliderContainer,
-.videoOsdBottom .volumeSliderContainer,
-.videoOsdBottom .videoOsdText,
-.videoOsdBottom .videoOsdBottom-body,
-.videoOsdBottom .videoOsdBottomButtons,
-.videoOsdBottom .osdControls .buttons,
-.videoOsdBottom .osdControls .slider,
-.videoOsdBottom .osdControls .center,
-.videoOsdBottom .osdControls .left,
-.videoOsdBottom .osdControls .right,
-.videoOsdBottom .btnPause,
-.videoOsdBottom .btnPlay,
-.videoOsdBottom .btnPreviousTrack,
-.videoOsdBottom .btnNextTrack,
-.videoOsdBottom .btnRewind,
-.videoOsdBottom .btnFastForward {
+html:not(.nova-native-osd) #videoOsdPage .videoOsdBottom>*:not(.osdControls):not(.abyss-custom-osd-bar),
+html:not(.nova-native-osd) .videoOsdBottom>*:not(.osdControls):not(.abyss-custom-osd-bar),
+html:not(.nova-native-osd) #videoOsdPage .osdControls>*:not(.abyss-custom-osd-bar),
+html:not(.nova-native-osd) .videoOsdBottom .osdControls>*:not(.abyss-custom-osd-bar),
+html:not(.nova-native-osd) .videoOsdBottom .sliderContainer,
+html:not(.nova-native-osd) .videoOsdBottom .videoOsdPositionContainer,
+html:not(.nova-native-osd) .videoOsdBottom .osdMediaStatus,
+html:not(.nova-native-osd) .videoOsdBottom .videoOsdVolumeSliderContainer,
+html:not(.nova-native-osd) .videoOsdBottom .volumeSliderContainer,
+html:not(.nova-native-osd) .videoOsdBottom .videoOsdText,
+html:not(.nova-native-osd) .videoOsdBottom .videoOsdBottom-body,
+html:not(.nova-native-osd) .videoOsdBottom .videoOsdBottomButtons,
+html:not(.nova-native-osd) .videoOsdBottom .osdControls .buttons,
+html:not(.nova-native-osd) .videoOsdBottom .osdControls .slider,
+html:not(.nova-native-osd) .videoOsdBottom .osdControls .center,
+html:not(.nova-native-osd) .videoOsdBottom .osdControls .left,
+html:not(.nova-native-osd) .videoOsdBottom .osdControls .right,
+html:not(.nova-native-osd) .videoOsdBottom .btnPause,
+html:not(.nova-native-osd) .videoOsdBottom .btnPlay,
+html:not(.nova-native-osd) .videoOsdBottom .btnPreviousTrack,
+html:not(.nova-native-osd) .videoOsdBottom .btnNextTrack,
+html:not(.nova-native-osd) .videoOsdBottom .btnRewind,
+html:not(.nova-native-osd) .videoOsdBottom .btnFastForward {
     position: absolute !important;
     width: 1px !important;
     height: 1px !important;
@@ -1557,7 +1559,7 @@ body.layout-mobile.abyss-osd-hidden .skinHeader,
     justify-content: center !important;
     width: 28px !important;
     height: 28px !important;
-    color: #00d26a !important;
+    color: var(--nova-accent, #00d26a) !important;
 }
 
 .abyss-hud-pill .abyss-hud-icon-wrap svg {
@@ -1577,7 +1579,7 @@ body.layout-mobile.abyss-osd-hidden .skinHeader,
 
 .abyss-hud-bar-fill {
     height: 100% !important;
-    background: #00d26a !important;
+    background: var(--nova-accent, #00d26a) !important;
     width: 0%;
     border-radius: 4px !important;
     transition: width 0.05s linear !important;
@@ -1600,7 +1602,7 @@ body.layout-mobile.abyss-osd-hidden .skinHeader,
 }
 
 .abyss-hud-seek-delta {
-    color: #00d26a !important;
+    color: var(--nova-accent, #00d26a) !important;
     font-size: 13px !important;
     font-weight: 600 !important;
 }
@@ -1765,16 +1767,16 @@ body.layout-mobile.abyss-osd-hidden .skinHeader,
 .videoOsdBottom .paper-slider-lower-container,
 .videoOsdBottom .sliderProgress,
 .videoOsdBottom .mdl-slider-background-lower {
-    background: #00d26a !important;
+    background: var(--nova-accent, #00d26a) !important;
     /* Neon Green */
     border-radius: 4px !important;
 }
 
 .videoOsdBottom .sliderKnobInner,
 .videoOsdBottom .mdl-slider-knob {
-    background: #00d26a !important;
+    background: var(--nova-accent, #00d26a) !important;
     border: 2px solid #ffffff !important;
-    box-shadow: 0 0 10px #00d26a, 0 0 4px rgba(0, 0, 0, 0.5) !important;
+    box-shadow: 0 0 10px var(--nova-accent, #00d26a), 0 0 4px rgba(0, 0, 0, 0.5) !important;
     width: 12px !important;
     height: 12px !important;
     border-radius: 50% !important;

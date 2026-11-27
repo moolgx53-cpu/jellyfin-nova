@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
@@ -50,6 +51,10 @@ public class NovaWebMiddleware
     private static readonly Regex SpotlightCssHrefRegex = new(
         @"spotlight\.css(?:\?v=[^""']*)?",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex HexColorRegex = new(
+        @"^#[0-9a-fA-F]{6}$",
+        RegexOptions.Compiled);
 
     private const string HeadPreloadSnippet = """
     <script>
@@ -134,11 +139,28 @@ public class NovaWebMiddleware
         var config = plugin.Configuration;
         if (fileName.Equals("version.json", StringComparison.OrdinalIgnoreCase))
         {
-            var verKey = $"{plugin.AssetVersion}:{config.EnableSpotlight}:{config.ForceDarkTheme}";
+            var accentColor = NormalizeAccentColor(config.AccentColor);
+            var spotlightSource = NormalizeSpotlightSource(config.SpotlightSource);
+            var collectionId = (config.SpotlightCollectionId ?? string.Empty).Trim();
+            var perfMode = NormalizePerformanceMode(config.PerformanceMode);
+            var verKey = string.Join(
+                ":",
+                plugin.AssetVersion,
+                config.EnableSpotlight,
+                config.ForceDarkTheme,
+                accentColor,
+                config.EnableTop10Row,
+                config.EnableHoverTrailers,
+                config.EnableLibraryBanner,
+                config.EnableCustomVideoOsd,
+                config.EnableHeroThemeVideo,
+                spotlightSource,
+                collectionId,
+                perfMode);
             var payload = _cachedVersionBytes;
             if (payload is null || !string.Equals(_cachedVersionKey, verKey, StringComparison.Ordinal))
             {
-                var versionJson = $"{{\"version\":\"{plugin.AssetVersion}\",\"enableSpotlight\":{(config.EnableSpotlight ? "true" : "false")},\"forceDarkTheme\":{(config.ForceDarkTheme ? "true" : "false")}}}";
+                var versionJson = BuildClientConfigJson(plugin);
                 payload = Encoding.UTF8.GetBytes(versionJson);
                 _cachedVersionBytes = payload;
                 _cachedVersionKey = verKey;
@@ -437,12 +459,49 @@ public class NovaWebMiddleware
         return text;
     }
 
+    private static string NormalizeAccentColor(string? value)
+    {
+        var trimmed = (value ?? string.Empty).Trim();
+        return HexColorRegex.IsMatch(trimmed) ? trimmed.ToLowerInvariant() : "#00d26a";
+    }
+
+    private static string NormalizeSpotlightSource(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized is "latest" or "random" or "toprated" or "collection" ? normalized : "latest";
+    }
+
+    private static string NormalizePerformanceMode(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized is "off" or "auto" or "on" ? normalized : "off";
+    }
+
+    private static string BuildClientConfigJson(Plugin plugin)
+    {
+        var config = plugin.Configuration;
+        var payload = new
+        {
+            version = plugin.AssetVersion,
+            enableSpotlight = config.EnableSpotlight,
+            forceDarkTheme = config.ForceDarkTheme,
+            accentColor = NormalizeAccentColor(config.AccentColor),
+            enableTop10Row = config.EnableTop10Row,
+            enableHoverTrailers = config.EnableHoverTrailers,
+            enableLibraryBanner = config.EnableLibraryBanner,
+            enableCustomVideoOsd = config.EnableCustomVideoOsd,
+            enableHeroThemeVideo = config.EnableHeroThemeVideo,
+            spotlightSource = NormalizeSpotlightSource(config.SpotlightSource),
+            spotlightCollectionId = (config.SpotlightCollectionId ?? string.Empty).Trim(),
+            performanceMode = NormalizePerformanceMode(config.PerformanceMode)
+        };
+        return JsonSerializer.Serialize(payload);
+    }
+
     private static string InjectNovaMarkup(string html, Plugin plugin)
     {
         var ver = plugin.AssetVersion;
-        var config = plugin.Configuration;
-        var enableSpotlight = config.EnableSpotlight ? "true" : "false";
-        var forceDarkTheme = config.ForceDarkTheme ? "true" : "false";
+        var configJson = BuildClientConfigJson(plugin);
 
         // Strip any legacy manual setup tags so nothing loads twice
         html = LegacyAssetTagRegex.Replace(html, string.Empty);
@@ -459,7 +518,7 @@ public class NovaWebMiddleware
 
         var bodySnippet =
             "\n    <!-- Jellyfin Nova Plugin Start -->\n" +
-            $"    <script>window.__NOVA_CONFIG__={{\"version\":\"{ver}\",\"enableSpotlight\":{enableSpotlight},\"forceDarkTheme\":{forceDarkTheme}}};</script>\n" +
+            $"    <script>window.__NOVA_CONFIG__={configJson};</script>\n" +
             $"    <link rel=\"stylesheet\" href=\"ui/abyss.css?v={ver}\">\n" +
             $"    <link rel=\"stylesheet\" href=\"ui/library-banner.css?v={ver}\">\n" +
             $"    <link rel=\"stylesheet\" href=\"ui/movie-details.css?v={ver}\">\n" +
