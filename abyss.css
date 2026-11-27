@@ -1433,8 +1433,8 @@ body.layout-mobile.abyss-osd-hidden .skinHeader,
 }
 
 /* Conceal duplicate native OSD elements visually while keeping them live in DOM for programmatic interaction */
-#videoOsdPage .videoOsdBottom>*:not(.osdControls),
-.videoOsdBottom>*:not(.osdControls),
+#videoOsdPage .videoOsdBottom>*:not(.osdControls):not(.abyss-custom-osd-bar),
+.videoOsdBottom>*:not(.osdControls):not(.abyss-custom-osd-bar),
 #videoOsdPage .osdControls>*:not(.abyss-custom-osd-bar),
 .videoOsdBottom .osdControls>*:not(.abyss-custom-osd-bar),
 .videoOsdBottom .sliderContainer,

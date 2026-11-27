@@ -64,6 +64,89 @@
 		} catch (e) { }
 	}
 
+	let lastFullscreenPlayIntentTime = 0;
+	let ensureOsdWatchdogTimer1 = null;
+	let ensureOsdWatchdogTimer2 = null;
+
+	function clearStaleRouterPromise() {
+		try {
+			const routers = [window.appRouter, window.parent?.appRouter, window.top?.appRouter];
+			for (const router of routers) {
+				if (!router) continue;
+				if (typeof router.resolveOnNextShow === 'function') {
+					const res = router.resolveOnNextShow;
+					router.promiseShow = null;
+					router.resolveOnNextShow = null;
+					try { res(); } catch (e) { }
+				} else if (router.promiseShow) {
+					router.promiseShow = null;
+				}
+			}
+		} catch (e) { }
+	}
+
+	function releaseIframeFocus() {
+		try {
+			const active = document.activeElement;
+			if (active && active.tagName === 'IFRAME') {
+				active.blur();
+			}
+			if (typeof window.focus === 'function') {
+				window.focus();
+			}
+		} catch (e) { }
+	}
+
+	function scheduleEnsureVideoOsdAfterPlay() {
+		lastFullscreenPlayIntentTime = Date.now();
+		clearStaleRouterPromise();
+		releaseIframeFocus();
+
+		clearTimeout(ensureOsdWatchdogTimer1);
+		clearTimeout(ensureOsdWatchdogTimer2);
+
+		const checkAndOpenOsd = () => {
+			if ((Date.now() - lastFullscreenPlayIntentTime) > 8000) return;
+			if (isVideoOsdPageActive()) {
+				applyExactVideoPlayerDesign();
+				if (isVideoOsdCurrentlyHidden()) {
+					wakeUpVideoOsd();
+				}
+				return;
+			}
+			const v = document.querySelector('.videoPlayerContainer video, video.htmlvideoplayer');
+			const pm = getInternalPlaybackManager();
+			const isPlayingMainVideo = Boolean(
+				(v && !v.paused && !v.ended && (v.currentTime > 0 || v.readyState >= 3)) ||
+				(pm && typeof pm.isPlayingVideo === 'function' && pm.isPlayingVideo())
+			);
+			if (!isPlayingMainVideo) return;
+
+			clearStaleRouterPromise();
+			try {
+				const router = window.appRouter || window.parent?.appRouter || window.top?.appRouter;
+				if (router && typeof router.showVideoOsd === 'function') {
+					router.showVideoOsd();
+				} else if (!(window.location.hash || '').toLowerCase().includes('video')) {
+					window.location.hash = '#/video';
+				}
+			} catch (e) {
+				if (!(window.location.hash || '').toLowerCase().includes('video')) {
+					window.location.hash = '#/video';
+				}
+			}
+			setTimeout(() => {
+				if (isVideoOsdPageActive()) {
+					applyExactVideoPlayerDesign();
+					wakeUpVideoOsd();
+				}
+			}, 120);
+		};
+
+		ensureOsdWatchdogTimer1 = setTimeout(checkAndOpenOsd, 450);
+		ensureOsdWatchdogTimer2 = setTimeout(checkAndOpenOsd, 1300);
+	}
+
 	// Intercept Jellyfin internal Webpack runtime to access playbackManager and router
 	let internalPlaybackManager = null;
 
@@ -137,6 +220,11 @@
 							) {
 								return Promise.resolve();
 							}
+						}
+					} catch (e) { }
+					try {
+						if (!options || options.fullscreen !== false) {
+							scheduleEnsureVideoOsdAfterPlay();
 						}
 					} catch (e) { }
 					return origPlay(options);
@@ -917,6 +1005,7 @@
 		const effectiveServerId = (item && item.ServerId) || serverId || '';
 
 		// 1. Try playbackManager (Webpack captured or Global)
+		scheduleEnsureVideoOsdAfterPlay();
 		const pm = getInternalPlaybackManager();
 		if (pm && typeof pm.play === 'function') {
 			try {
@@ -5535,7 +5624,7 @@
 
 	function clickNativePlayerButton(selectors, anchorBtn) {
 		for (const sel of selectors) {
-			const btn = document.querySelector(sel);
+			const btn = queryInActiveVideoOsd(sel);
 			if (btn && dispatchNativeButtonClick(btn, anchorBtn)) {
 				return true;
 			}
@@ -5550,7 +5639,7 @@
 		lastMenuTriggerTime = now;
 
 		for (const sel of selectors) {
-			const btn = document.querySelector(sel);
+			const btn = queryInActiveVideoOsd(sel);
 			if (btn && dispatchNativeButtonClick(btn, anchorBtn)) {
 				return true;
 			}
@@ -5645,7 +5734,7 @@
 
 		// 4. Try video OSD title links ONLY
 		try {
-			const titleLink = document.querySelector('.videoOsdTitle a[href*="id="], .videoOsdParentTitle a[href*="id="], .videoOsdHeader .title a[href*="id="]');
+			const titleLink = queryInActiveVideoOsd('.videoOsdTitle a[href*="id="], .videoOsdParentTitle a[href*="id="], .videoOsdHeader .title a[href*="id="]');
 			if (titleLink) {
 				const href = titleLink.getAttribute('href') || '';
 				const match = href.match(/[?&]id=([^&]+)/i);
@@ -5655,7 +5744,7 @@
 
 		// 5. Try native btnFavorite button data attribute in video player
 		try {
-			const nativeFav = document.querySelector('#videoOsdPage .btnFavorite[data-id], .videoOsdHeader .btnFavorite[data-id], .videoOsdBottom .btnFavorite[data-id]');
+			const nativeFav = queryInActiveVideoOsd('#videoOsdPage .btnFavorite[data-id], .videoOsdHeader .btnFavorite[data-id], .videoOsdBottom .btnFavorite[data-id]');
 			if (nativeFav) {
 				const id = nativeFav.getAttribute('data-id');
 				if (id && id.length > 10) return id;
@@ -5668,14 +5757,14 @@
 	window.__abyssFavoriteCache = window.__abyssFavoriteCache || {};
 
 	async function togglePlayerFavorite(customBar) {
-		const nativeRatingBtn = document.querySelector('#videoOsdPage .btnUserRating, #videoOsdPage .btnFavorite, .btnUserRating, .btnFavorite');
+		const nativeRatingBtn = queryInActiveVideoOsd('#videoOsdPage .btnUserRating, #videoOsdPage .btnFavorite, .btnUserRating, .btnFavorite');
 		if (nativeRatingBtn) {
 			try {
 				nativeRatingBtn.click();
 			} catch (e) {}
 		}
 
-		const favBtn = customBar ? customBar.querySelector('.abyss-btn-fav') : document.querySelector('.abyss-btn-fav');
+		const favBtn = customBar ? customBar.querySelector('.abyss-btn-fav') : getActiveCustomOsdBar()?.querySelector('.abyss-btn-fav');
 		const itemId = getPlayerCurrentItemId() || nativeRatingBtn?.getAttribute('data-id');
 		if (!itemId) return;
 
@@ -5743,7 +5832,7 @@
 
 		const itemId = getPlayerCurrentItemId();
 		const item = getPlayerCurrentItem();
-		const nativeFavBtn = document.querySelector('#videoOsdPage .btnFavorite, .videoOsdHeader .btnFavorite, .videoOsdBottom .btnFavorite, .btnFavoriteToggle, #videoOsdPage .btnUserRating, .btnUserRating');
+		const nativeFavBtn = queryInActiveVideoOsd('#videoOsdPage .btnFavorite, .videoOsdHeader .btnFavorite, .videoOsdBottom .btnFavorite, .btnFavoriteToggle, #videoOsdPage .btnUserRating, .btnUserRating');
 
 		let isFav = false;
 		if (itemId && window.__abyssFavoriteCache[itemId] !== undefined) {
@@ -5796,23 +5885,71 @@
 		return `${m}:${s < 10 ? '0' : ''}${s}`;
 	};
 
+	function getActiveVideoOsdPage() {
+		const pages = document.querySelectorAll('#videoOsdPage:not(.hide), .videoOsdPage:not(.hide)');
+		for (let i = pages.length - 1; i >= 0; i--) {
+			if (pages[i].style.display !== 'none') return pages[i];
+		}
+		return null;
+	}
+
+	function getActiveVideoOsdBottom() {
+		const activePage = getActiveVideoOsdPage();
+		if (activePage) {
+			return activePage.querySelector('.videoOsdBottom, .videoOsBottom');
+		}
+		const fallback = document.querySelector('.videoOsdBottom:not(.hide)');
+		return (fallback && !fallback.closest('#videoOsdPage.hide, .videoOsdPage.hide')) ? fallback : null;
+	}
+
+	function getActiveCustomOsdBar() {
+		const osdBottom = getActiveVideoOsdBottom();
+		if (osdBottom) {
+			return osdBottom.querySelector('.abyss-custom-osd-bar');
+		}
+		const activePage = getActiveVideoOsdPage();
+		return activePage ? activePage.querySelector('.abyss-custom-osd-bar') : null;
+	}
+
+	function queryInActiveVideoOsd(sel) {
+		const activePage = getActiveVideoOsdPage();
+		if (activePage) {
+			const scoped = sel
+				.split(',')
+				.map(s => s.trim().replace(/^#videoOsdPage\s+/i, '').replace(/^\.videoOsdPage\s+/i, ''))
+				.filter(Boolean)
+				.join(', ');
+			if (scoped) {
+				const el = activePage.querySelector(scoped);
+				if (el) return el;
+			}
+		}
+		const candidates = document.querySelectorAll(sel);
+		for (const c of candidates) {
+			if (!c.closest('#videoOsdPage.hide, .videoOsdPage.hide')) return c;
+		}
+		return null;
+	}
+
 	let boundVideoEl = null;
 
 	function getMainPlayerVideo() {
-		if (boundVideoEl && boundVideoEl.isConnected) return boundVideoEl;
-		return document.querySelector('#videoOsdPage video, .videoOsdPage video, video.htmlvideoplayer, .videoPlayerContainer video') ||
+		if (boundVideoEl && boundVideoEl.isConnected && !boundVideoEl.closest('#videoOsdPage.hide, .videoOsdPage.hide')) return boundVideoEl;
+		const activePage = getActiveVideoOsdPage();
+		if (activePage) {
+			const pv = activePage.querySelector('video');
+			if (pv) return pv;
+		}
+		return document.querySelector('.videoPlayerContainer video, video.htmlvideoplayer') ||
 			document.querySelector('video:not(.abyss-card-trailer-video):not(#abyss-theme-video-player):not(.hero-theme-video)');
 	}
 
 	function isVideoOsdPageActive() {
-		const osdPage = document.getElementById('videoOsdPage') || document.querySelector('.videoOsdPage');
-		if (osdPage) return !osdPage.classList.contains('hide');
-		const osdBottom = document.querySelector('.videoOsdBottom:not(.hide)');
-		return Boolean(osdBottom);
+		return Boolean(getActiveVideoOsdPage() || getActiveVideoOsdBottom());
 	}
 
 	function isVideoOsdCurrentlyHidden() {
-		const osdBottom = document.querySelector('#videoOsdPage .videoOsdBottom, .videoOsdBottom');
+		const osdBottom = getActiveVideoOsdBottom();
 		if (osdBottom) {
 			return osdBottom.classList.contains('videoOsdBottom-hidden') ||
 				osdBottom.classList.contains('osd-hidden') ||
@@ -5854,7 +5991,16 @@
 		} catch (e) { }
 
 		// 2. Ensure DOM classes are immediately unhidden for both bottom OSD and top header
-		const osdBottoms = document.querySelectorAll('#videoOsdPage .videoOsdBottom, .videoOsdBottom, .videoOsdBottom-maincontrols');
+		const activePage = getActiveVideoOsdPage();
+		const osdBottoms = new Set();
+		if (activePage) {
+			activePage.querySelectorAll('.videoOsdBottom, .videoOsdBottom-maincontrols').forEach(el => osdBottoms.add(el));
+		}
+		document.querySelectorAll('.videoOsdBottom, .videoOsdBottom-maincontrols').forEach(el => {
+			if (!el.closest('#videoOsdPage.hide, .videoOsdPage.hide')) {
+				osdBottoms.add(el);
+			}
+		});
 		osdBottoms.forEach(el => {
 			el.classList.remove('videoOsdBottom-hidden', 'osd-hidden', 'hide');
 		});
@@ -5902,7 +6048,7 @@
 	}
 
 	function applyVolumeUIPct(customBar, pct, isMuted) {
-		const bar = customBar || document.querySelector('.abyss-custom-osd-bar');
+		const bar = customBar || getActiveCustomOsdBar();
 		if (!bar) return;
 		const refs = getCustomBarRefs(bar);
 		const effectivePct = isMuted ? 0 : Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
@@ -6094,7 +6240,7 @@
 	}
 
 	function syncCustomOsdBarState() {
-		const customBar = document.querySelector('.abyss-custom-osd-bar');
+		const customBar = getActiveCustomOsdBar();
 		if (!customBar) return;
 		const refs = getCustomBarRefs(customBar);
 		if (!refs) return;
@@ -6130,14 +6276,14 @@
 					refs.seekInput._lastPct = pctFixed;
 				}
 			} else {
-				if (!refs.nativeStartTime || !refs.nativeStartTime.isConnected) {
-					refs.nativeStartTime = document.querySelector('#videoOsdPage .startTimeText, #videoOsdPage .osdPositionText, .videoOsdBottom .osdPositionText');
+				if (!refs.nativeStartTime || !refs.nativeStartTime.isConnected || refs.nativeStartTime.closest('#videoOsdPage.hide, .videoOsdPage.hide')) {
+					refs.nativeStartTime = queryInActiveVideoOsd('#videoOsdPage .startTimeText, #videoOsdPage .osdPositionText, .videoOsdBottom .osdPositionText');
 				}
-				if (!refs.nativeEndTime || !refs.nativeEndTime.isConnected) {
-					refs.nativeEndTime = document.querySelector('#videoOsdPage .endTimeText, #videoOsdPage .osdDurationText, .videoOsdBottom .osdDurationText');
+				if (!refs.nativeEndTime || !refs.nativeEndTime.isConnected || refs.nativeEndTime.closest('#videoOsdPage.hide, .videoOsdPage.hide')) {
+					refs.nativeEndTime = queryInActiveVideoOsd('#videoOsdPage .endTimeText, #videoOsdPage .osdDurationText, .videoOsdBottom .osdDurationText');
 				}
-				if (!refs.nativeSlider || !refs.nativeSlider.isConnected) {
-					refs.nativeSlider = document.querySelector('#videoOsdPage .osdPositionSlider, .videoOsdBottom .osdPositionSlider');
+				if (!refs.nativeSlider || !refs.nativeSlider.isConnected || refs.nativeSlider.closest('#videoOsdPage.hide, .videoOsdPage.hide')) {
+					refs.nativeSlider = queryInActiveVideoOsd('#videoOsdPage .osdPositionSlider, .videoOsdBottom .osdPositionSlider');
 				}
 				if (refs.nativeStartTime && refs.nativeStartTime.textContent && refs.timeCurr) {
 					const txt = refs.nativeStartTime.textContent.trim();
@@ -6178,8 +6324,8 @@
 		} else if (v) {
 			isPaused = Boolean(v.paused);
 		} else {
-			if (!refs.nativePause || !refs.nativePause.isConnected) {
-				refs.nativePause = document.querySelector('#videoOsdPage .btnPause, .videoOsdBottom .btnPause');
+			if (!refs.nativePause || !refs.nativePause.isConnected || refs.nativePause.closest('#videoOsdPage.hide, .videoOsdPage.hide')) {
+				refs.nativePause = queryInActiveVideoOsd('#videoOsdPage .btnPause, .videoOsdBottom .btnPause');
 			}
 			if (refs.nativePause) {
 				isPaused = refs.nativePause.querySelector('.play, .play_arrow') !== null || refs.nativePause.classList.contains('btnPlay');
@@ -6229,7 +6375,10 @@
 			scheduleOsdSync();
 			return;
 		}
-		if (boundVideoEl === v) return;
+		if (boundVideoEl === v) {
+			scheduleOsdSync();
+			return;
+		}
 		boundVideoEl = v;
 
 		v.addEventListener('timeupdate', scheduleOsdSync, { passive: true });
@@ -6258,7 +6407,7 @@
 	}
 
 	function applyImmediateSeekBarUI(targetTicks, durTicks) {
-		const customBar = document.querySelector('.abyss-custom-osd-bar');
+		const customBar = getActiveCustomOsdBar();
 		if (!customBar || !(durTicks > 0)) return;
 		const refs = getCustomBarRefs(customBar);
 		if (!refs) return;
@@ -6481,7 +6630,7 @@
 			document.body.classList.add('abyss-video-playing');
 		}
 
-		const osdBottom = document.querySelector('#videoOsdPage .videoOsdBottom, .videoOsdBottom');
+		const osdBottom = getActiveVideoOsdBottom();
 		const isBottomHidden = Boolean(
 			osdBottom && (
 				osdBottom.classList.contains('videoOsdBottom-hidden') ||
@@ -6543,7 +6692,7 @@
 			stopHeroThemeMedia();
 		}
 
-		const osdBottom = document.querySelector('.videoOsdBottom, #videoOsdPage .videoOsdBottom, .videoOsBottom');
+		const osdBottom = getActiveVideoOsdBottom();
 		if (!osdBottom) return;
 
 		let customBar = osdBottom.querySelector('.abyss-custom-osd-bar');
@@ -6842,7 +6991,7 @@
 			customBar.querySelector('.abyss-btn-prev').addEventListener('click', (e) => {
 				e.preventDefault(); e.stopPropagation();
 				const pm = getInternalPlaybackManager();
-				const nativePrevTrack = document.querySelector('#videoOsdPage .btnPreviousTrack:not(.hide):not([disabled])');
+				const nativePrevTrack = queryInActiveVideoOsd('#videoOsdPage .btnPreviousTrack:not(.hide):not([disabled])');
 				if (nativePrevTrack || (pm && typeof pm.getCurrentPlaylistIndex === 'function' && pm.getCurrentPlaylistIndex() > 0)) {
 					if (pm && typeof pm.previousTrack === 'function') {
 						pm.previousTrack();
@@ -6883,7 +7032,7 @@
 			customBar.querySelector('.abyss-btn-next').addEventListener('click', (e) => {
 				e.preventDefault(); e.stopPropagation();
 				const pm = getInternalPlaybackManager();
-				const nativeNextTrack = document.querySelector('#videoOsdPage .btnNextTrack:not(.hide):not([disabled])');
+				const nativeNextTrack = queryInActiveVideoOsd('#videoOsdPage .btnNextTrack:not(.hide):not([disabled])');
 				if (nativeNextTrack) {
 					if (pm && typeof pm.nextTrack === 'function') {
 						pm.nextTrack();
@@ -7050,7 +7199,11 @@
 			return;
 		}
 
-		const titleEls = document.querySelectorAll('#videoOsdPage .osdTitle, #videoOsdPage .headerTitle, .videoOsdHeader .osdTitle, .skinHeader.osdHeader .pageTitle');
+		const activeOsdPage = getActiveVideoOsdPage();
+		const titleEls = [
+			...(activeOsdPage ? activeOsdPage.querySelectorAll('.osdTitle, .headerTitle') : []),
+			...document.querySelectorAll('.videoOsdHeader .osdTitle, .skinHeader.osdHeader .pageTitle')
+		];
 		titleEls.forEach(el => {
 			el.style.setProperty('font-size', '14px', 'important');
 		});
@@ -7091,7 +7244,7 @@
 		const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.innerWidth <= 768);
 		if (!isTouch) return;
 
-		const videoContainer = document.querySelector('#videoOsdPage, .videoOsdPage');
+		const videoContainer = getActiveVideoOsdPage();
 		const video = () => getMainPlayerVideo();
 		if (!videoContainer) return;
 
@@ -7583,8 +7736,17 @@
 			if (abyssAssetVersion) {
 				const currentSrc = iframe.getAttribute('src') || '';
 				const expectedSrc = `ui/spotlight.html?v=${abyssAssetVersion}`;
-				if (currentSrc.includes('spotlight.html') && currentSrc !== expectedSrc) {
-					iframe.setAttribute('src', expectedSrc);
+				if (currentSrc.includes('spotlight.html') && currentSrc !== expectedSrc && iframe.dataset.abyssSrcVer !== abyssAssetVersion) {
+					iframe.dataset.abyssSrcVer = abyssAssetVersion;
+					try {
+						if (iframe.contentWindow && iframe.contentWindow.location) {
+							iframe.contentWindow.location.replace(new URL(expectedSrc, window.location.href).href);
+						} else {
+							iframe.setAttribute('src', expectedSrc);
+						}
+					} catch (e) {
+						iframe.setAttribute('src', expectedSrc);
+					}
 				}
 			}
 			const ownerPage = iframe.closest('.page, [data-role="page"]');
@@ -7795,10 +7957,10 @@
 	setInterval(() => {
 		if (document.hidden) return;
 		if (isVideoOsdPageActive()) {
-			if (!document.querySelector('.abyss-custom-osd-bar') || !boundVideoEl || !boundVideoEl.isConnected) {
+			if (!getActiveCustomOsdBar() || !boundVideoEl || !boundVideoEl.isConnected) {
 				applyExactVideoPlayerDesign();
 			}
-			const osdContainer = document.querySelector('#videoOsdPage, .videoOsdPage');
+			const osdContainer = getActiveVideoOsdPage();
 			if (osdContainer && osdContainer.dataset.abyssGesturesActive !== 'true') {
 				initMobileVideoGestures();
 			}
@@ -8447,13 +8609,15 @@
 		// Ensure Top Back Button (.headerBackButton) and Home Button (.headerHomeButton) always work
 		// even if a third-party trailer iframe touched session history or left appRouter.promiseShow pending
 		document.addEventListener('click', (e) => {
+			const nativePlayTrigger = e.target?.closest?.('[data-action="play"], [data-action="resume"], .cardOverlayButton[data-action="play"], .cardOverlayButton[data-action="resume"]');
+			if (nativePlayTrigger) {
+				hookWebpack();
+				scheduleEnsureVideoOsdAfterPlay();
+				return;
+			}
 			const homeBtn = e.target?.closest?.('.headerHomeButton, button[data-action="home"]');
 			if (homeBtn) {
-				try {
-					if (window.appRouter && window.appRouter.promiseShow) {
-						window.appRouter.promiseShow = null;
-					}
-				} catch (err) { }
+				clearStaleRouterPromise();
 				const hashBefore = window.location.hash || '';
 				setTimeout(() => {
 					if (window.location.hash === hashBefore && (hashBefore.startsWith('#/details') || hashBefore.startsWith('#!/details'))) {
@@ -8469,11 +8633,7 @@
 			if (!hashBefore.startsWith('#/details') && !hashBefore.startsWith('#!/details')) return;
 			setTimeout(() => {
 				if (window.location.hash === hashBefore) {
-					try {
-						if (window.appRouter && window.appRouter.promiseShow) {
-							window.appRouter.promiseShow = null;
-						}
-					} catch (err) { }
+					clearStaleRouterPromise();
 					window.location.hash = lastNonDetailHash || '#/home.html';
 				}
 				syncSpotlightIframeVersion();

@@ -465,6 +465,26 @@
 			async function triggerSpotlightItemPlay(item) {
 				if (!item) return;
 				try {
+					if (document.activeElement && typeof document.activeElement.blur === 'function') {
+						document.activeElement.blur();
+					}
+					const topWin = window.top || window.parent;
+					if (topWin) {
+						const router = topWin.appRouter;
+						if (router) {
+							if (typeof router.resolveOnNextShow === 'function') {
+								const res = router.resolveOnNextShow;
+								router.promiseShow = null;
+								router.resolveOnNextShow = null;
+								try { res(); } catch (e) { }
+							} else if (router.promiseShow) {
+								router.promiseShow = null;
+							}
+						}
+						if (typeof topWin.focus === 'function') topWin.focus();
+					}
+				} catch (e) { }
+				try {
 					if (window.top && typeof window.top.__abyssPlayMediaItem === 'function') {
 						await window.top.__abyssPlayMediaItem(item);
 						return;

@@ -68,8 +68,14 @@
 
     function setVideoState() {
         var hash = (window.location.hash || '').toLowerCase();
-        var osd = document.getElementById('videoOsdPage');
-        var hasVideoOsd = Boolean(osd && !osd.classList.contains('hide') && osd.style.display !== 'none');
+        var osdPages = document.querySelectorAll('#videoOsdPage:not(.hide), .videoOsdPage:not(.hide)');
+        var hasVideoOsd = false;
+        for (var i = 0; i < osdPages.length; i++) {
+            if (osdPages[i].style.display !== 'none') {
+                hasVideoOsd = true;
+                break;
+            }
+        }
         if (!hasVideoOsd && !hash.includes('video')) {
             body.classList.remove('abyss-video-playing', 'abyss-osd-hidden', 'videoPlayerPage');
             return;
