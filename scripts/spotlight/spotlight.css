@@ -1343,43 +1343,43 @@ body::-webkit-scrollbar,
 
 /* ================= QT5WEBENGINE / CHROMIUM <87 FLEXBOX GAP FALLBACKS ================= */
 @supports not (inset: 0) {
-	#meta > .meta-pill + .meta-pill {
+	#meta>.meta-pill+.meta-pill {
 		margin-left: 6px;
 	}
 
-	.meta-pill > svg {
+	.meta-pill>svg {
 		margin-right: 5px;
 	}
 
-	#buttons > .btn + .btn {
+	#buttons>.btn+.btn {
 		margin-left: 12px !important;
 	}
 
-	.btn > svg {
+	.btn>svg {
 		margin-right: 7px;
 	}
 
-	.top10-heading > .top10-tag {
+	.top10-heading>.top10-tag {
 		margin-right: 12px;
 	}
 
-	.top10-arrows > .top10-arrow + .top10-arrow {
+	.top10-arrows>.top10-arrow+.top10-arrow {
 		margin-left: 8px;
 	}
 
-	.top10-row > .top10-card + .top10-card {
+	.top10-row>.top10-card+.top10-card {
 		margin-left: 20px;
 	}
 
-	.top10-overlay-meta > * + * {
+	.top10-overlay-meta>*+* {
 		margin-left: 4px;
 	}
 
-	.top10-overlay-actions > * + * {
+	.top10-overlay-actions>*+* {
 		margin-left: 6px;
 	}
 
-	.showcase-trailer-actions > .showcase-trailer-btn + .showcase-trailer-btn {
+	.showcase-trailer-actions>.showcase-trailer-btn+.showcase-trailer-btn {
 		margin-left: 8px;
 	}
 
