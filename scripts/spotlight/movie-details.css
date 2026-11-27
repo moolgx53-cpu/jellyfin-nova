@@ -27,11 +27,7 @@
 .movie-custom-wrapper,
 .person-custom-wrapper,
 .collection-custom-wrapper,
-.series-custom-wrapper,
-.movie-custom-wrapper *,
-.person-custom-wrapper *,
-.collection-custom-wrapper *,
-.series-custom-wrapper * {
+.series-custom-wrapper {
 	-webkit-tap-highlight-color: transparent !important;
 	-webkit-touch-callout: none !important;
 	-webkit-user-drag: none !important;
@@ -143,19 +139,12 @@
 
 /* Allow horizontal scrolling inside child containers meant to scroll horizontally without stretching outer page */
 .movie-custom-wrapper .cast-extra-horizontal-grid,
-.movie-custom-wrapper .cast-extra-horizontal-grid *,
 .movie-custom-wrapper .gallery-thumbs-row,
-.movie-custom-wrapper .gallery-thumbs-row *,
 .movie-custom-wrapper .similar-grid,
-.movie-custom-wrapper .similar-grid *,
 .collection-custom-wrapper .cast-extra-horizontal-grid,
-.collection-custom-wrapper .cast-extra-horizontal-grid *,
 .collection-custom-wrapper .gallery-thumbs-row,
-.collection-custom-wrapper .gallery-thumbs-row *,
 .series-custom-wrapper .cast-extra-horizontal-grid,
-.series-custom-wrapper .cast-extra-horizontal-grid *,
-.series-custom-wrapper .gallery-thumbs-row,
-.series-custom-wrapper .gallery-thumbs-row * {
+.series-custom-wrapper .gallery-thumbs-row {
 	touch-action: pan-x pan-y !important;
 	overscroll-behavior-x: contain !important;
 }
@@ -3169,17 +3158,6 @@ body.layout-mobile.abyss-osd-hidden .skinHeader,
 	-webkit-transform: translateY(-24px) !important;
 }
 
-.skinHeader.osdHeader-hidden *,
-body.abyss-video-playing .skinHeader.osdHeader-hidden *,
-body.abyss-video-playing .skinHeader.hide *,
-body.abyss-osd-hidden .skinHeader *,
-#videoOsdPage .videoOsdHeader.osdHeader-hidden *,
-.videoOsdHeader.osdHeader-hidden * {
-	opacity: 0 !important;
-	visibility: hidden !important;
-	pointer-events: none !important;
-}
-
 #videoOsdPage .osdTitle,
 #videoOsdPage .headerTitle,
 .videoOsdHeader .osdTitle,
@@ -3202,6 +3180,8 @@ body.abyss-osd-hidden .skinHeader *,
 	padding: 0 !important;
 	margin: 0 !important;
 	background: transparent !important;
+	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none !important;
 	z-index: 10000 !important;
 	transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s ease !important;
 	pointer-events: none !important;
@@ -3223,6 +3203,8 @@ body.abyss-osd-hidden .skinHeader *,
 .videoOsdBottom .osdControls,
 .osdControls {
 	background: transparent !important;
+	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none !important;
 	border: none !important;
 	box-shadow: none !important;
 	padding: 0 !important;
@@ -3332,7 +3314,6 @@ body.abyss-osd-hidden .skinHeader *,
 	background: #00d26a !important;
 	border-radius: 4px !important;
 	pointer-events: none !important;
-	will-change: width !important;
 }
 
 .abyss-seekbar-knob {
@@ -3346,7 +3327,6 @@ body.abyss-osd-hidden .skinHeader *,
 	top: 50% !important;
 	box-shadow: 0 0 10px #00d26a, 0 0 4px #00d26a !important;
 	pointer-events: none !important;
-	will-change: left !important;
 }
 
 .abyss-seekbar-input {
@@ -3401,7 +3381,6 @@ body.abyss-osd-hidden .skinHeader *,
 	background: #0284c7 !important;
 	border-radius: 4px !important;
 	pointer-events: none !important;
-	will-change: width !important;
 }
 
 .abyss-vol-knob {
@@ -3415,7 +3394,6 @@ body.abyss-osd-hidden .skinHeader *,
 	top: 50% !important;
 	box-shadow: 0 0 8px #0284c7, 0 0 4px rgba(0, 0, 0, 0.5) !important;
 	pointer-events: none !important;
-	will-change: left !important;
 	transition: transform 0.12s ease !important;
 }
 
@@ -4634,12 +4612,14 @@ body.is-mobile-device .abyss-grp-left .abyss-vol-slider-wrap {
 	align-items: center;
 	justify-content: center;
 	opacity: 0;
-	transition: opacity 0.2s ease;
+	visibility: hidden;
+	transition: opacity 0.2s ease, visibility 0.2s ease;
 	z-index: 3;
 }
 
 .episode-thumb-wrap:hover .episode-play-overlay {
 	opacity: 1;
+	visibility: visible;
 }
 
 .episode-play-circle-btn {
@@ -5899,4 +5879,22 @@ html.jmp-hero-mpv-active .series-seasons-section,
 html.jmp-hero-mpv-active .collection-movies-section {
 	position: relative !important;
 	z-index: 20 !important;
+}
+
+/* Skip offscreen layout & paint work for below-the-fold detail sections */
+@supports (content-visibility: auto) {
+	.similar-movies-section,
+	.person-movies-section,
+	.collection-movies-section,
+	.series-seasons-section,
+	.season-cast-section,
+	.episode-more-season-section {
+		content-visibility: auto;
+		contain-intrinsic-size: auto 340px;
+	}
+
+	.episode-card {
+		content-visibility: auto;
+		contain-intrinsic-size: auto 154px;
+	}
 }

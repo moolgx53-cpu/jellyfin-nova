@@ -11,7 +11,8 @@
 /* Force rendering on icon elements across the theme */
 .material-icons-round,
 .material-symbols-rounded,
-[class*="material-icons"] {
+.material-icons,
+.material-icons-outlined {
     font-family: 'Material Icons Round' !important;
     font-weight: normal;
     font-style: normal;
@@ -1183,17 +1184,6 @@ body.layout-mobile.abyss-osd-hidden .skinHeader,
     -webkit-transform: translateY(-24px) !important;
 }
 
-.skinHeader.osdHeader-hidden *,
-body.abyss-video-playing .skinHeader.osdHeader-hidden *,
-body.abyss-video-playing .skinHeader.hide *,
-body.abyss-osd-hidden .skinHeader *,
-#videoOsdPage .videoOsdHeader.osdHeader-hidden *,
-.videoOsdHeader.osdHeader-hidden * {
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-}
-
 #videoOsdPage .osdTitle,
 #videoOsdPage .headerTitle,
 .videoOsdHeader .osdTitle,
@@ -1216,6 +1206,8 @@ body.abyss-osd-hidden .skinHeader *,
     padding: 0 !important;
     margin: 0 !important;
     background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     z-index: 10000 !important;
     transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s ease !important;
     pointer-events: none !important;
@@ -1237,6 +1229,8 @@ body.abyss-osd-hidden .skinHeader *,
 .videoOsdBottom .osdControls,
 .osdControls {
     background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;
@@ -1309,7 +1303,6 @@ body.abyss-osd-hidden .skinHeader *,
     background: #00d26a !important;
     border-radius: 4px !important;
     pointer-events: none !important;
-    will-change: width !important;
 }
 
 .abyss-seekbar-knob {
@@ -1323,7 +1316,6 @@ body.abyss-osd-hidden .skinHeader *,
     top: 50% !important;
     box-shadow: 0 0 10px #00d26a, 0 0 4px #00d26a !important;
     pointer-events: none !important;
-    will-change: left !important;
 }
 
 .abyss-seekbar-input {
@@ -1378,7 +1370,6 @@ body.abyss-osd-hidden .skinHeader *,
     background: #0284c7 !important;
     border-radius: 4px !important;
     pointer-events: none !important;
-    will-change: width !important;
 }
 
 .abyss-vol-knob {
@@ -1392,7 +1383,6 @@ body.abyss-osd-hidden .skinHeader *,
     top: 50% !important;
     box-shadow: 0 0 8px #0284c7, 0 0 4px rgba(0, 0, 0, 0.5) !important;
     pointer-events: none !important;
-    will-change: left !important;
     transition: transform 0.12s ease !important;
 }
 
@@ -4095,7 +4085,6 @@ div[data-role="controlgroup"] a[data-role="button"]:last-child {
     .mainDrawer,
     .toast,
     .emby-tabs-slider,
-    .videoOsdBottom .osdControls,
     .readOnlyContent .verticalSection,
     .button-submit,
     .upNextContainer,
@@ -4109,7 +4098,6 @@ div[data-role="controlgroup"] a[data-role="button"]:last-child {
     .raised.cancel.block.btnForgotPassword.emby-button,
     .btnQuick,
     .pageTitle,
-    .videoOsdBottom,
     .headerButton {
         backdrop-filter: blur(15px) !important;
     }
@@ -4317,39 +4305,39 @@ div[data-role="controlgroup"] a[data-role="button"]:last-child {
 }
 
 .verticalSection:nth-child(1) {
-    animation: abyss-section-fade-up 0.7s var(--abyss-ease) both 0.05s;
+    animation: abyss-section-fade-up 0.7s var(--abyss-ease) backwards 0.05s;
 }
 
 .verticalSection:nth-child(2) {
-    animation: abyss-section-fade-up 0.7s var(--abyss-ease) both 0.1s;
+    animation: abyss-section-fade-up 0.7s var(--abyss-ease) backwards 0.1s;
 }
 
 .verticalSection:nth-child(3) {
-    animation: abyss-section-fade-up 0.7s var(--abyss-ease) both 0.15s;
+    animation: abyss-section-fade-up 0.7s var(--abyss-ease) backwards 0.15s;
 }
 
 .verticalSection:nth-child(4) {
-    animation: abyss-section-fade-up 0.7s var(--abyss-ease) both 0.2s;
+    animation: abyss-section-fade-up 0.7s var(--abyss-ease) backwards 0.2s;
 }
 
 .verticalSection:nth-child(5) {
-    animation: abyss-section-fade-up 0.7s var(--abyss-ease) both 0.25s;
+    animation: abyss-section-fade-up 0.7s var(--abyss-ease) backwards 0.25s;
 }
 
 .verticalSection:nth-child(6) {
-    animation: abyss-section-fade-up 0.7s var(--abyss-ease) both 0.3s;
+    animation: abyss-section-fade-up 0.7s var(--abyss-ease) backwards 0.3s;
 }
 
 .verticalSection:nth-child(7) {
-    animation: abyss-section-fade-up 0.7s var(--abyss-ease) both 0.35s;
+    animation: abyss-section-fade-up 0.7s var(--abyss-ease) backwards 0.35s;
 }
 
 .verticalSection:nth-child(8) {
-    animation: abyss-section-fade-up 0.7s var(--abyss-ease) both 0.4s;
+    animation: abyss-section-fade-up 0.7s var(--abyss-ease) backwards 0.4s;
 }
 
 .verticalSection:nth-child(n+9) {
-    animation: abyss-section-fade-up 0.7s var(--abyss-ease) both 0.45s;
+    animation: abyss-section-fade-up 0.7s var(--abyss-ease) backwards 0.45s;
 }
 
 /* ==========================================================================

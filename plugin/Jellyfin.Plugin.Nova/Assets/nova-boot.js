@@ -164,25 +164,47 @@
 
     try {
         var timer = null;
+        var obs = null;
+        var checkAndDisconnectIfBound = function () {
+            if (!obs) return;
+            var boundTab = document.querySelector('#indexPage #homeTab[data-nova-tab-observed="true"]');
+            if (boundTab) {
+                obs.disconnect();
+                obs = null;
+            }
+        };
+
         var scheduleMount = function () {
             if (timer) return;
             timer = setTimeout(function () {
                 timer = null;
                 mountSpotlightIframe();
+                checkAndDisconnectIfBound();
             }, 60);
         };
 
-        var obs = new MutationObserver(function (mutations) {
+        obs = new MutationObserver(function (mutations) {
             for (var i = 0; i < mutations.length; i++) {
-                if (mutations[i].addedNodes && mutations[i].addedNodes.length) {
-                    scheduleMount();
-                    return;
+                var m = mutations[i];
+                if (!m.addedNodes || !m.addedNodes.length) continue;
+                var target = m.target;
+                if (target && target.nodeType === 1 && target.closest && target.closest('#videoOsdPage, .videoOsdBottom, .videoSubtitles, .videoSubtitlesInner, .itemsContainer, .scrollSlider, .abyss-custom-osd-bar, .abyss-gesture-hud')) {
+                    continue;
+                }
+                for (var j = 0; j < m.addedNodes.length; j++) {
+                    if (m.addedNodes[j].nodeType === 1) {
+                        scheduleMount();
+                        return;
+                    }
                 }
             }
         });
         obs.observe(document.documentElement, { childList: true, subtree: true });
+        checkAndDisconnectIfBound();
 
         window.addEventListener('hashchange', scheduleMount, { passive: true });
+        document.addEventListener('viewshow', scheduleMount, { passive: true });
+        document.addEventListener('pageshow', scheduleMount, { passive: true });
         document.addEventListener('DOMContentLoaded', boot, { once: true });
     } catch (e) { }
 })();

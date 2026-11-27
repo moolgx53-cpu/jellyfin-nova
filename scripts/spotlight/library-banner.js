@@ -165,31 +165,53 @@
 		return null;
 	}
 
+	let sharedBannerIo = null;
+	if ('IntersectionObserver' in window) {
+		sharedBannerIo = new IntersectionObserver((entries) => {
+			for (const entry of entries) {
+				entry.target.classList.toggle('is-paused', !entry.isIntersecting);
+			}
+		}, { threshold: 0.02 });
+	}
+
+	function removeBannerEl(b) {
+		if (!b) return;
+		if (sharedBannerIo) {
+			try { sharedBannerIo.unobserve(b); } catch (e) { }
+		}
+		b.remove();
+	}
+
 	async function updateLibraryBannerState() {
 		if (isNonLibraryPage()) {
-			document.querySelectorAll('.library-hero-banner').forEach(b => b.remove());
+			document.querySelectorAll('.library-hero-banner').forEach(b => {
+				if (!b.closest('.page.hide')) removeBannerEl(b);
+			});
 			return;
 		}
 
 		const container = getActivePageContainer();
 		if (!container) {
-			document.querySelectorAll('.library-hero-banner').forEach(b => b.remove());
+			document.querySelectorAll('.library-hero-banner').forEach(b => {
+				if (!b.closest('.page.hide')) removeBannerEl(b);
+			});
 			return;
 		}
 
 		const parentId = await resolveParentId(container);
 		if (!parentId) return;
 
-		const allBanners = Array.from(document.querySelectorAll('.library-hero-banner'));
-		if (allBanners.length > 0) {
-			const primaryBanner = allBanners[0];
-			if (primaryBanner.getAttribute('data-parent-id') === parentId && container.contains(primaryBanner)) {
-				allBanners.slice(1).forEach(b => b.remove());
-				return;
-			} else {
-				allBanners.forEach(b => b.remove());
-			}
+		const containerBanner = container.querySelector('.library-hero-banner');
+		if (containerBanner && containerBanner.getAttribute('data-parent-id') === parentId) {
+			document.querySelectorAll('.library-hero-banner').forEach(b => {
+				if (b !== containerBanner && !b.closest('.page.hide')) removeBannerEl(b);
+			});
+			return;
 		}
+
+		document.querySelectorAll('.library-hero-banner').forEach(b => {
+			if (container.contains(b) || !b.closest('.page.hide')) removeBannerEl(b);
+		});
 
 		if (isRendering) return;
 		isRendering = true;
@@ -264,17 +286,14 @@
 			banner.appendChild(marqueeWrap);
 			banner.appendChild(contentDiv);
 
-			// Strict final cleanup before insertion to ensure only one banner exists
-			document.querySelectorAll('.library-hero-banner').forEach(b => b.remove());
+			// Strict final cleanup before insertion to ensure only one banner exists in visible container
+			document.querySelectorAll('.library-hero-banner').forEach(b => {
+				if (currentContainer.contains(b) || !b.closest('.page.hide')) removeBannerEl(b);
+			});
 			currentContainer.insertBefore(banner, currentContainer.firstChild);
 
-			if ('IntersectionObserver' in window) {
-				const io = new IntersectionObserver((entries) => {
-					for (const entry of entries) {
-						banner.classList.toggle('is-paused', !entry.isIntersecting);
-					}
-				}, { threshold: 0.02 });
-				io.observe(banner);
+			if (sharedBannerIo) {
+				sharedBannerIo.observe(banner);
 			}
 		} catch (err) {
 			console.warn('[Library Banner] error:', err);
@@ -381,13 +400,19 @@
 		const isBackdrop = type === 'Backdrop';
 		const width = isBackdrop ? 640 : 220;
 		const quality = isBackdrop ? 72 : 78;
+		const targetId = (isBackdrop && !item.BackdropImageTags?.length && item.ParentBackdropItemId)
+			? item.ParentBackdropItemId
+			: item.Id;
+		const tag = item.ImageTags?.[type] ||
+			(isBackdrop ? (item.BackdropImageTags?.[0] || item.ParentBackdropImageTags?.[0]) : (item.SeriesPrimaryImageTag || item.AlbumPrimaryImageTag));
 		if (api && typeof api.getScaledImageUrl === 'function') {
-			return api.getScaledImageUrl(item.Id, { type: type, quality: quality, fillWidth: width });
+			const opts = { type: type, quality: quality, fillWidth: width };
+			if (tag) opts.tag = tag;
+			return api.getScaledImageUrl(targetId, opts);
 		}
-		const tag = item.ImageTags?.[type] || (type === 'Primary' ? item.SeriesPrimaryImageTag : null);
 		const tagParam = tag ? `&tag=${tag}` : '';
 		const tokenParam = token ? `&api_key=${token}` : '';
-		return `${base}/Items/${item.Id}/Images/${type}?quality=${quality}&fillWidth=${width}${tagParam}${tokenParam}`;
+		return `${base}/Items/${targetId}/Images/${type}?quality=${quality}&fillWidth=${width}${tagParam}${tokenParam}`;
 	}
 
 	function escapeHtml(str) {

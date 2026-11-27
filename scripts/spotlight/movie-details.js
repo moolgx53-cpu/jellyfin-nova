@@ -4,8 +4,40 @@
 	if (window.__abyssMovieDetailsLoaded) return;
 	window.__abyssMovieDetailsLoaded = true;
 
-	let isEnhancing = false;
+	let enhanceSeq = 0;
 	const itemCache = {};
+
+	function lruSetObj(obj, key, val, max = 100) {
+		if (!obj || !key) return;
+		if (Object.prototype.hasOwnProperty.call(obj, key)) delete obj[key];
+		obj[key] = val;
+		const keys = Object.keys(obj);
+		if (keys.length > max) {
+			const excess = keys.length - max;
+			for (let i = 0; i < excess; i++) delete obj[keys[i]];
+		}
+	}
+
+	function lruSetMap(map, key, val, max = 100) {
+		if (!map || !key) return;
+		if (map.has(key)) map.delete(key);
+		map.set(key, val);
+		while (map.size > max) {
+			const firstKey = map.keys().next().value;
+			map.delete(firstKey);
+		}
+	}
+
+	function toGalleryThumbUrl(url) {
+		return url ? url.replace(/fillWidth=\d+/i, 'fillWidth=480').replace(/quality=\d+/i, 'quality=80') : '';
+	}
+
+	const _codecProbeVid = document.createElement('video');
+	const CAN_PLAY_H264 = Boolean(_codecProbeVid.canPlayType('video/mp4; codecs="avc1.42E01E"'));
+	const CAN_PLAY_HEVC = Boolean(
+		_codecProbeVid.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"') ||
+		_codecProbeVid.canPlayType('video/mp4; codecs="hev1.1.6.L93.B0"')
+	);
 
 	// Detect runtime environment (Jellyfin Media Player Desktop vs Mobile/Web Browser)
 	try {
@@ -103,7 +135,7 @@
 								hash.includes('item') ||
 								document.querySelector('#itemDetailPage:not(.hide), .itemDetailPage:not(.hide)')
 							) {
-								return new Promise(() => {});
+								return Promise.resolve();
 							}
 						}
 					} catch (e) { }
@@ -388,7 +420,7 @@
 			try {
 				const current = window.Emby?.Page?.currentItem || window.top?.Emby?.Page?.currentItem;
 				if (current && (current.Id === itemId || current.id === itemId)) {
-					itemCache[itemId] = current;
+					lruSetObj(itemCache, itemId, current, 100);
 					return current;
 				}
 			} catch (e) { }
@@ -404,7 +436,7 @@
 			if (api && typeof api.getItem === 'function') {
 				const item = await api.getItem(userId, itemId);
 				if (item) {
-					itemCache[itemId] = item;
+					lruSetObj(itemCache, itemId, item, 100);
 					return item;
 				}
 			}
@@ -416,7 +448,7 @@
 				const res = await fetch(`${base}/Users/${userId}/Items/${itemId}?api_key=${token}`, { headers });
 				if (res.ok) {
 					const item = await res.json();
-					itemCache[itemId] = item;
+					lruSetObj(itemCache, itemId, item, 100);
 					return item;
 				}
 			} catch (e) { }
@@ -426,7 +458,7 @@
 				const res = await fetch(`${base}/Items/${itemId}?api_key=${token}`, { headers });
 				if (res.ok) {
 					const item = await res.json();
-					itemCache[itemId] = item;
+					lruSetObj(itemCache, itemId, item, 100);
 					return item;
 				}
 			} catch (e) { }
@@ -488,7 +520,7 @@
 
 		let cleanImdbId = normalizeImdbId(rawImdbId);
 		const cacheKey = `v5_${cleanImdbId || tmdbId || `${englishTitle}_${year}`}`;
-		if (liveRatingCache[cacheKey]) return liveRatingCache[cacheKey];
+		if (Object.prototype.hasOwnProperty.call(liveRatingCache, cacheKey)) return liveRatingCache[cacheKey];
 
 		// Stage 1: Resolve IMDb ID from TMDb external_ids if missing
 		if (!cleanImdbId && tmdbId) {
@@ -514,6 +546,7 @@
 		}
 
 		// Stage 3: Query OMDb API with clean IMDb ID + type
+		let imdbQueryAnswered = false;
 		if (cleanImdbId) {
 			for (const key of OMDB_KEYS) {
 				if (deadOmdbKeys.has(key)) continue;
@@ -528,14 +561,16 @@
 						const data = await res.json();
 						if (data && data.Response === 'True' && data.imdbRating && data.imdbRating !== 'N/A') {
 							const val = parseFloat(data.imdbRating).toFixed(1);
-							liveRatingCache[cacheKey] = { score: val, source: 'IMDb' };
-							return liveRatingCache[cacheKey];
+							const hit = { score: val, source: 'IMDb' };
+							lruSetObj(liveRatingCache, cacheKey, hit, 100);
+							return hit;
 						}
 						const errMsg = String(data?.Error || '').toLowerCase();
 						if (errMsg.includes('limit') || errMsg.includes('key')) {
 							deadOmdbKeys.add(key);
 							continue;
 						}
+						imdbQueryAnswered = true;
 						break;
 					}
 				} catch (e) { }
@@ -543,7 +578,7 @@
 		}
 
 		// Stage 4: Query OMDb by English Title & Year with strict type parameter
-		if (englishTitle) {
+		if (englishTitle && !imdbQueryAnswered) {
 			for (const key of OMDB_KEYS) {
 				if (deadOmdbKeys.has(key)) continue;
 				try {
@@ -558,8 +593,9 @@
 						const data = await res.json();
 						if (data && data.Response === 'True' && data.imdbRating && data.imdbRating !== 'N/A') {
 							const val = parseFloat(data.imdbRating).toFixed(1);
-							liveRatingCache[cacheKey] = { score: val, source: 'IMDb' };
-							return liveRatingCache[cacheKey];
+							const hit = { score: val, source: 'IMDb' };
+							lruSetObj(liveRatingCache, cacheKey, hit, 100);
+							return hit;
 						}
 						const errMsg = String(data?.Error || '').toLowerCase();
 						if (errMsg.includes('limit') || errMsg.includes('key')) {
@@ -587,8 +623,9 @@
 						const data = await res.json();
 						if (data && typeof data.vote_average === 'number' && data.vote_average > 0) {
 							const val = data.vote_average.toFixed(1);
-							liveRatingCache[cacheKey] = { score: val, source: 'TMDb' };
-							return liveRatingCache[cacheKey];
+							const hit = { score: val, source: 'TMDb' };
+							lruSetObj(liveRatingCache, cacheKey, hit, 100);
+							return hit;
 						}
 						break;
 					}
@@ -599,9 +636,12 @@
 
 		// Stage 6: Jellyfin CommunityRating
 		if (typeof item.CommunityRating === 'number' && item.CommunityRating > 0) {
-			return { score: item.CommunityRating.toFixed(1), source: 'TMDb' };
+			const fallback = { score: item.CommunityRating.toFixed(1), source: 'TMDb' };
+			lruSetObj(liveRatingCache, cacheKey, fallback, 100);
+			return fallback;
 		}
 
+		lruSetObj(liveRatingCache, cacheKey, null, 100);
 		return null;
 	}
 
@@ -1107,6 +1147,18 @@
 		const root = container || document;
 		root.querySelectorAll('.hero-theme-video, .hero-theme-iframe').forEach(el => {
 			try {
+				if (el._abyssThemeFadeTimer) {
+					clearTimeout(el._abyssThemeFadeTimer);
+					el._abyssThemeFadeTimer = null;
+				}
+				if (el._abyssThemeIo) {
+					try { el._abyssThemeIo.disconnect(); } catch (e) { }
+					el._abyssThemeIo = null;
+				}
+				if (el._abyssThemeVisHandler) {
+					document.removeEventListener('visibilitychange', el._abyssThemeVisHandler);
+					el._abyssThemeVisHandler = null;
+				}
 				if (el.tagName === 'IFRAME') {
 					el.remove();
 				} else {
@@ -1159,16 +1211,18 @@
 					const res = await api.getThemeMedia(userId, itemId, true);
 					if (res) {
 						const vItems = res?.ThemeVideosResult?.Items || res?.Items || [];
-						window.__abyssThemeVideoCache[itemId] = vItems[0] || null;
-						return window.__abyssThemeVideoCache[itemId];
+						const hit = vItems[0] || null;
+						lruSetObj(window.__abyssThemeVideoCache, itemId, hit, 100);
+						return hit;
 					}
 				}
 				if (typeof api.getThemeVideos === 'function') {
 					const res = await api.getThemeVideos(itemId);
 					if (res) {
 						const vItems = Array.isArray(res) ? res : (res?.Items || res?.ThemeVideosResult?.Items || []);
-						window.__abyssThemeVideoCache[itemId] = vItems[0] || null;
-						return window.__abyssThemeVideoCache[itemId];
+						const hit = vItems[0] || null;
+						lruSetObj(window.__abyssThemeVideoCache, itemId, hit, 100);
+						return hit;
 					}
 				}
 			}
@@ -1184,12 +1238,13 @@
 			if (res.ok) {
 				const data = await res.json();
 				const list = data?.ThemeVideosResult?.Items || (Array.isArray(data?.Items) ? data.Items : (Array.isArray(data) ? data : []));
-				window.__abyssThemeVideoCache[itemId] = list[0] || null;
-				return window.__abyssThemeVideoCache[itemId];
+				const hit = list[0] || null;
+				lruSetObj(window.__abyssThemeVideoCache, itemId, hit, 100);
+				return hit;
 			}
 		} catch (err) { }
 
-		window.__abyssThemeVideoCache[itemId] = null;
+		lruSetObj(window.__abyssThemeVideoCache, itemId, null, 100);
 		return null;
 	}
 
@@ -1204,12 +1259,9 @@
 		const codec = (videoStream?.Codec || '').toLowerCase();
 		const container = (themeVideoItem.Container || mediaSource?.Container || themeVideoItem.Path || '').toLowerCase();
 
-		const testVid = document.createElement('video');
-		const canPlayH264 = Boolean(testVid.canPlayType('video/mp4; codecs="avc1.42E01E"'));
+		const canPlayH264 = CAN_PLAY_H264;
 		const isHevc = codec.includes('hevc') || codec.includes('h265');
-		const canPlayHevc = isHevc
-			? Boolean(testVid.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"') || testVid.canPlayType('video/mp4; codecs="hev1.1.6.L93.B0"'))
-			: true;
+		const canPlayHevc = isHevc ? CAN_PLAY_HEVC : true;
 		const isUnsupportedContainer = /\.(mkv|avi|ts|wmv|flv)$/i.test(container) || /^(mkv|matroska|avi|mpegts|wmv)$/i.test(container);
 		const isAlreadyWebm = /webm/i.test(container);
 
@@ -1380,33 +1432,48 @@
 		const heroContainer = customWrap.querySelector('.hero-section .hero-bg-container, .hero-section > div:first-child');
 		if (!heroContainer) return;
 
-		let video = heroContainer.querySelector('video.hero-theme-video');
-		if (!video) {
-			video = document.createElement('video');
-			video.className = 'hero-theme-video';
-			video.autoplay = true;
-			video.loop = false;
-			video.muted = true;
-			video.defaultMuted = true;
-			video.playsInline = true;
-			video.preload = 'auto';
-			video.setAttribute('muted', '');
-			video.setAttribute('playsinline', '');
-			video.setAttribute('autoplay', '');
-			video.removeAttribute('loop');
-			video.src = themeVideoUrl;
-			heroContainer.insertBefore(video, heroContainer.firstChild);
-		} else {
-			video.loop = false;
-			video.removeAttribute('loop');
-			video.src = themeVideoUrl;
+		// Recreate cleanly if an older video element existed so listeners never duplicate
+		const existingVid = heroContainer.querySelector('video.hero-theme-video');
+		if (existingVid) {
+			if (existingVid._abyssThemeFadeTimer) clearTimeout(existingVid._abyssThemeFadeTimer);
+			if (existingVid._abyssThemeIo) try { existingVid._abyssThemeIo.disconnect(); } catch (e) { }
+			if (existingVid._abyssThemeVisHandler) document.removeEventListener('visibilitychange', existingVid._abyssThemeVisHandler);
+			try { existingVid.pause(); existingVid.removeAttribute('src'); existingVid.load(); existingVid.remove(); } catch (e) { }
 		}
 
+		const video = document.createElement('video');
+		video.className = 'hero-theme-video';
+		video.autoplay = true;
+		video.loop = false;
 		video.muted = true;
 		video.defaultMuted = true;
+		video.playsInline = true;
+		video.preload = 'auto';
+		video.setAttribute('muted', '');
+		video.setAttribute('playsinline', '');
+		video.setAttribute('autoplay', '');
+		video.removeAttribute('loop');
+		video.src = themeVideoUrl;
+		heroContainer.insertBefore(video, heroContainer.firstChild);
+
+		let isHeroIntersecting = true;
+		const cleanupHeroVideoResources = () => {
+			if (video._abyssThemeFadeTimer) {
+				clearTimeout(video._abyssThemeFadeTimer);
+				video._abyssThemeFadeTimer = null;
+			}
+			if (video._abyssThemeIo) {
+				try { video._abyssThemeIo.disconnect(); } catch (e) { }
+				video._abyssThemeIo = null;
+			}
+			if (video._abyssThemeVisHandler) {
+				document.removeEventListener('visibilitychange', video._abyssThemeVisHandler);
+				video._abyssThemeVisHandler = null;
+			}
+		};
 
 		const showVideo = () => {
-			if (!video.isConnected || isVideoOsdPageActive() || document.querySelector('.abyss-trailer-player-overlay')) return;
+			if (!video.isConnected || !isHeroIntersecting || document.hidden || isVideoOsdPageActive() || document.querySelector('.abyss-trailer-player-overlay')) return;
 			video.style.display = 'block';
 			video.style.opacity = '1';
 			if (video.paused && !video.ended) {
@@ -1414,18 +1481,56 @@
 			}
 		};
 
+		const heroSection = customWrap.querySelector('.hero-section') || video;
+		if (heroSection && 'IntersectionObserver' in window) {
+			const io = new IntersectionObserver((entries) => {
+				for (const entry of entries) {
+					if (!video.isConnected) {
+						io.disconnect();
+						return;
+					}
+					isHeroIntersecting = entry.isIntersecting;
+					if (!isHeroIntersecting || document.hidden) {
+						try { video.pause(); } catch (e) { }
+					} else if (!video.ended && !isVideoOsdPageActive() && !document.querySelector('.abyss-trailer-player-overlay')) {
+						video.play().catch(() => {});
+					}
+				}
+			}, { threshold: 0.1 });
+			io.observe(heroSection);
+			video._abyssThemeIo = io;
+		}
+
+		const onVisChange = () => {
+			if (!video.isConnected) {
+				cleanupHeroVideoResources();
+				return;
+			}
+			if (document.hidden) {
+				try { video.pause(); } catch (e) { }
+			} else if (isHeroIntersecting && !video.ended && !isVideoOsdPageActive() && !document.querySelector('.abyss-trailer-player-overlay')) {
+				video.play().catch(() => {});
+			}
+		};
+		document.addEventListener('visibilitychange', onVisChange);
+		video._abyssThemeVisHandler = onVisChange;
+
 		video.addEventListener('canplay', showVideo);
 		video.addEventListener('playing', showVideo);
 		video.addEventListener('loadeddata', showVideo);
 		video.addEventListener('ended', () => {
 			video.style.transition = 'opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1)';
 			video.style.opacity = '0';
-			setTimeout(() => {
-				if (video && video.parentNode) {
-					video.style.display = 'none';
-				}
+			video._abyssThemeFadeTimer = setTimeout(() => {
+				cleanupHeroVideoResources();
+				try {
+					video.pause();
+					video.removeAttribute('src');
+					video.load();
+					video.remove();
+				} catch (e) { }
 			}, 900);
-		});
+		}, { once: true });
 		video.addEventListener('error', () => {
 			if (!video.dataset.retriedTranscode) {
 				video.dataset.retriedTranscode = 'true';
@@ -1438,6 +1543,7 @@
 			}
 			video.style.opacity = '0';
 			video.style.display = 'none';
+			cleanupHeroVideoResources();
 		});
 
 		const playPromise = video.play();
@@ -1644,8 +1750,9 @@
 			}
 
 			if (bestRole) {
-				personRoleCache[personId] = bestRole.toUpperCase();
-				return bestRole.toUpperCase();
+				const roleUpper = bestRole.toUpperCase();
+				lruSetObj(personRoleCache, personId, roleUpper, 100);
+				return roleUpper;
 			}
 		} catch (e) {
 			console.warn('[Movie Details] Error detecting person role from Jellyfin:', e);
@@ -1655,16 +1762,23 @@
 
 	async function fetchTmdbPersonDetails(tmdbId) {
 		if (!tmdbId) return null;
-		if (personRoleCache['tmdb_' + tmdbId]) return personRoleCache['tmdb_' + tmdbId];
+		const cacheKey = 'tmdb_' + tmdbId;
+		if (personRoleCache[cacheKey]) return personRoleCache[cacheKey];
 
 		for (const key of TMDB_KEYS) {
+			if (deadTmdbKeys.has(key)) continue;
 			try {
 				const res = await fetch(`https://api.themoviedb.org/3/person/${tmdbId}?api_key=${key}`);
+				if (res.status === 401 || res.status === 403 || res.status === 429) {
+					deadTmdbKeys.add(key);
+					continue;
+				}
 				if (res.ok) {
 					const data = await res.json();
-					personRoleCache['tmdb_' + tmdbId] = data;
+					lruSetObj(personRoleCache, cacheKey, data, 100);
 					return data;
 				}
+				if (res.status === 404) break;
 			} catch (e) { }
 		}
 		return null;
@@ -2025,10 +2139,6 @@
 		if (isFav !== undefined) {
 			syncAllFavoriteUI(itemId, isFav);
 		}
-	}
-
-	if (!window.__abyssFavBindingInterval) {
-		window.__abyssFavBindingInterval = setInterval(enforceInstantFavoriteBinding, 1000);
 	}
 
 	async function toggleFavorite(itemId, item, favBtn, page) {
@@ -2623,11 +2733,14 @@
 		if (primaryCast.length) {
 			primaryCast.forEach(p => {
 				const pImgTag = p.PrimaryImageTag ? `${base}/Items/${p.Id}/Images/Primary?quality=80&fillWidth=100&tag=${p.PrimaryImageTag}&api_key=${token}` : '';
+				const avatarHtml = pImgTag
+					? `<img class="cast-img" src="${pImgTag}" alt="${escapeHtml(p.Name)}" loading="lazy" onError="this.style.backgroundColor='#374151'" />`
+					: `<div class="cast-img" style="background-color:#374151;"></div>`;
 				const personHref = p.Id ? `#/details?id=${p.Id}` : 'javascript:void(0)';
 				const roleName = p.Role || p.Character || p.RoleName || 'Cast';
 				castItemsHtml += `
 					<a href="${personHref}" class="cast-item">
-						<img class="cast-img" src="${pImgTag}" alt="${escapeHtml(p.Name)}" onError="this.style.backgroundColor='#374151'" />
+						${avatarHtml}
 						<div class="cast-info-col">
 							<span class="cast-name-text">${escapeHtml(p.Name)}</span>
 							<span class="cast-role-text">${escapeHtml(roleName)}</span>
@@ -2644,11 +2757,14 @@
 		if (extraCast.length) {
 			extraCast.forEach(p => {
 				const pImgTag = p.PrimaryImageTag ? `${base}/Items/${p.Id}/Images/Primary?quality=80&fillWidth=100&tag=${p.PrimaryImageTag}&api_key=${token}` : '';
+				const avatarHtml = pImgTag
+					? `<img class="cast-img" src="${pImgTag}" alt="${escapeHtml(p.Name)}" loading="lazy" onError="this.style.backgroundColor='#374151'" />`
+					: `<div class="cast-img" style="background-color:#374151;"></div>`;
 				const personHref = p.Id ? `#/details?id=${p.Id}` : 'javascript:void(0)';
 				const roleName = p.Role || p.Character || p.RoleName || '';
 				extraCastHtml += `
 					<a href="${personHref}" class="cast-item cast-item-horizontal">
-						<img class="cast-img" src="${pImgTag}" alt="${escapeHtml(p.Name)}" onError="this.style.backgroundColor='#374151'" />
+						${avatarHtml}
 						<div class="cast-info-col">
 							<span class="cast-name-text">${escapeHtml(p.Name)}</span>
 							${roleName ? `<span class="cast-role-text">${escapeHtml(roleName)}</span>` : ''}
@@ -2684,10 +2800,10 @@
 
 		let thumbsRowHtml = '';
 		if (thumb1) {
-			thumbsRowHtml += `<div class="thumb-box" id="collection-gallery-photo-1" title="View Photo"><img src="${thumb1}" alt="" /></div>`;
+			thumbsRowHtml += `<div class="thumb-box" id="collection-gallery-photo-1" title="View Photo"><img src="${toGalleryThumbUrl(thumb1)}" loading="lazy" decoding="async" alt="" /></div>`;
 		}
 		if (thumb2) {
-			thumbsRowHtml += `<div class="thumb-box" id="collection-gallery-photo-2" title="View Photo"><img src="${thumb2}" alt="" /></div>`;
+			thumbsRowHtml += `<div class="thumb-box" id="collection-gallery-photo-2" title="View Photo"><img src="${toGalleryThumbUrl(thumb2)}" loading="lazy" decoding="async" alt="" /></div>`;
 		}
 		if (hasMore && remainingCount > 0) {
 			thumbsRowHtml += `<div class="thumb-box-more" id="collection-gallery-photo-more" title="View All Photos">+${remainingCount}</div>`;
@@ -2697,7 +2813,7 @@
 			<section class="right-col">
 				<h3 class="section-heading">Gallery</h3>
 				<div class="gallery-featured-photo" id="collection-gallery-photo-main" title="View Photo">
-					<img src="${featuredPhoto}" alt="Collection Photo" />
+					<img src="${toGalleryThumbUrl(featuredPhoto)}" loading="lazy" decoding="async" alt="Collection Photo" />
 				</div>
 				${thumbsRowHtml ? `<div class="gallery-thumbs-row">${thumbsRowHtml}</div>` : ''}
 			</section>
@@ -3215,34 +3331,31 @@
 		const { token, userId } = getAuth();
 		const base = getBaseUrl();
 
-		const [seasons, nextUp, allEpisodes] = await Promise.all([
+		const [seasons, nextUp] = await Promise.all([
 			fetchSeriesSeasons(itemId),
-			fetchSeriesNextUp(itemId),
-			fetchSeriesEpisodes(itemId)
+			fetchSeriesNextUp(itemId)
 		]);
 
 		const seasonsCount = seasons.length || (item.ChildCount || 1);
 
-		// Calculate Total & Watched Episodes with 100% precision
+		// Calculate Total & Watched Episodes directly from seasons metadata without over-fetching every Episode DTO
 		let totalEpisodes = 0;
 		let watchedEpisodes = 0;
 
-		if (allEpisodes && allEpisodes.length > 0) {
-			totalEpisodes = allEpisodes.length;
-			watchedEpisodes = allEpisodes.filter(ep => ep.UserData?.Played).length;
-		} else {
-			seasons.forEach(s => {
-				const sCount = s.ChildCount || s.RecursiveItemCount || (s.ItemCounts?.EpisodeCount) || 0;
-				totalEpisodes += sCount;
-				if (s.UserData?.PlayedPercentage === 100 || s.UserData?.Played) {
-					watchedEpisodes += sCount;
-				} else if (s.UserData?.UnplayedItemCount !== undefined && sCount > 0) {
-					watchedEpisodes += Math.max(0, sCount - s.UserData.UnplayedItemCount);
-				}
-			});
-			if (!totalEpisodes && (item.RecursiveItemCount || item.ItemCounts?.EpisodeCount)) {
-				totalEpisodes = item.RecursiveItemCount || item.ItemCounts?.EpisodeCount;
+		seasons.forEach(s => {
+			const sCount = s.ChildCount || s.RecursiveItemCount || (s.ItemCounts?.EpisodeCount) || 0;
+			totalEpisodes += sCount;
+			if (s.UserData?.PlayedPercentage === 100 || s.UserData?.Played) {
+				watchedEpisodes += sCount;
+			} else if (s.UserData?.UnplayedItemCount !== undefined && sCount > 0) {
+				watchedEpisodes += Math.max(0, sCount - s.UserData.UnplayedItemCount);
 			}
+		});
+		if (!totalEpisodes && (item.RecursiveItemCount || item.ItemCounts?.EpisodeCount)) {
+			totalEpisodes = item.RecursiveItemCount || item.ItemCounts?.EpisodeCount;
+		}
+		if (!watchedEpisodes && item.UserData?.UnplayedItemCount !== undefined && totalEpisodes > 0) {
+			watchedEpisodes = Math.max(0, totalEpisodes - item.UserData.UnplayedItemCount);
 		}
 
 		// Calculate Year Span & Status with 100% precision
@@ -3384,11 +3497,14 @@
 		if (primaryCast.length) {
 			primaryCast.forEach(p => {
 				const pImgTag = p.PrimaryImageTag ? `${base}/Items/${p.Id}/Images/Primary?quality=80&fillWidth=100&tag=${p.PrimaryImageTag}&api_key=${token}` : '';
+				const avatarHtml = pImgTag
+					? `<img class="cast-img" src="${pImgTag}" alt="${escapeHtml(p.Name)}" loading="lazy" onError="this.style.backgroundColor='#374151'" />`
+					: `<div class="cast-img" style="background-color:#374151;"></div>`;
 				const personHref = p.Id ? `#/details?id=${p.Id}` : 'javascript:void(0)';
 				const roleName = p.Role || p.Character || p.RoleName || 'Cast';
 				castItemsHtml += `
 					<a href="${personHref}" class="cast-item">
-						<img class="cast-img" src="${pImgTag}" alt="${escapeHtml(p.Name)}" onError="this.style.backgroundColor='#374151'" />
+						${avatarHtml}
 						<div class="cast-info-col">
 							<span class="cast-name-text">${escapeHtml(p.Name)}</span>
 							<span class="cast-role-text">${escapeHtml(roleName)}</span>
@@ -3405,11 +3521,14 @@
 		if (extraCast.length) {
 			extraCast.forEach(p => {
 				const pImgTag = p.PrimaryImageTag ? `${base}/Items/${p.Id}/Images/Primary?quality=80&fillWidth=100&tag=${p.PrimaryImageTag}&api_key=${token}` : '';
+				const avatarHtml = pImgTag
+					? `<img class="cast-img" src="${pImgTag}" alt="${escapeHtml(p.Name)}" loading="lazy" onError="this.style.backgroundColor='#374151'" />`
+					: `<div class="cast-img" style="background-color:#374151;"></div>`;
 				const personHref = p.Id ? `#/details?id=${p.Id}` : 'javascript:void(0)';
 				const roleName = p.Role || p.Character || p.RoleName || '';
 				extraCastHtml += `
 					<a href="${personHref}" class="cast-item cast-item-horizontal">
-						<img class="cast-img" src="${pImgTag}" alt="${escapeHtml(p.Name)}" onError="this.style.backgroundColor='#374151'" />
+						${avatarHtml}
 						<div class="cast-info-col">
 							<span class="cast-name-text">${escapeHtml(p.Name)}</span>
 							${roleName ? `<span class="cast-role-text">${escapeHtml(roleName)}</span>` : ''}
@@ -3445,10 +3564,10 @@
 
 		let thumbsRowHtml = '';
 		if (thumb1) {
-			thumbsRowHtml += `<div class="thumb-box" id="series-gallery-photo-1" title="View Photo"><img src="${thumb1}" alt="" /></div>`;
+			thumbsRowHtml += `<div class="thumb-box" id="series-gallery-photo-1" title="View Photo"><img src="${toGalleryThumbUrl(thumb1)}" loading="lazy" decoding="async" alt="" /></div>`;
 		}
 		if (thumb2) {
-			thumbsRowHtml += `<div class="thumb-box" id="series-gallery-photo-2" title="View Photo"><img src="${thumb2}" alt="" /></div>`;
+			thumbsRowHtml += `<div class="thumb-box" id="series-gallery-photo-2" title="View Photo"><img src="${toGalleryThumbUrl(thumb2)}" loading="lazy" decoding="async" alt="" /></div>`;
 		}
 		if (hasMore && remainingCount > 0) {
 			thumbsRowHtml += `<div class="thumb-box-more" id="series-gallery-photo-more" title="View All Photos">+${remainingCount}</div>`;
@@ -3478,7 +3597,7 @@
 					</div>
 					<div class="series-right-nextup-body">
 						<div class="series-right-nextup-thumb">
-							<img src="${epThumbnail}" alt="${escapeHtml(epName)}" onError="this.style.backgroundColor='#1f2937'" />
+							<img src="${epThumbnail}" alt="${escapeHtml(epName)}" loading="lazy" onError="this.style.backgroundColor='#1f2937'" />
 							<div class="series-right-nextup-play">
 								<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>
 							</div>
@@ -3501,7 +3620,7 @@
 			<section class="right-col">
 				<h3 class="section-heading">Gallery</h3>
 				<div class="gallery-featured-photo" id="series-gallery-photo-main" title="View Photo">
-					<img src="${featuredPhoto}" alt="Series Photo" />
+					<img src="${toGalleryThumbUrl(featuredPhoto)}" loading="lazy" decoding="async" alt="Series Photo" />
 				</div>
 				${thumbsRowHtml ? `<div class="gallery-thumbs-row">${thumbsRowHtml}</div>` : ''}
 				${nextUpHtml}
@@ -3513,15 +3632,12 @@
 		if (seasons.length) {
 			seasons.forEach(s => {
 				const sPoster = getImageUrl(s, 'Primary', base, token) || posterUrl;
-				let sEpCount = s.ChildCount || s.RecursiveItemCount || (s.ItemCounts?.EpisodeCount) || 0;
+				const sEpCount = s.ChildCount || s.RecursiveItemCount || (s.ItemCounts?.EpisodeCount) || 0;
 				let sWatchedCount = 0;
-
-				if (allEpisodes && allEpisodes.length) {
-					const seasonEps = allEpisodes.filter(ep => ep.SeasonId === s.Id || (ep.ParentIndexNumber !== undefined && s.IndexNumber !== undefined && ep.ParentIndexNumber === s.IndexNumber));
-					if (seasonEps.length) {
-						sEpCount = seasonEps.length;
-						sWatchedCount = seasonEps.filter(ep => ep.UserData?.Played).length;
-					}
+				if (s.UserData?.PlayedPercentage === 100 || s.UserData?.Played) {
+					sWatchedCount = sEpCount;
+				} else if (s.UserData?.UnplayedItemCount !== undefined && sEpCount > 0) {
+					sWatchedCount = Math.max(0, sEpCount - s.UserData.UnplayedItemCount);
 				}
 
 				const sYear = s.ProductionYear || (s.PremiereDate ? new Date(s.PremiereDate).getFullYear() : '');
@@ -4085,11 +4201,14 @@
 			let castCardsHtml = '';
 			people.slice(0, 16).forEach(p => {
 				const pImg = p.PrimaryImageTag ? `${base}/Items/${p.Id}/Images/Primary?quality=80&fillWidth=150&tag=${p.PrimaryImageTag}&api_key=${token}` : '';
+				const avatarEl = pImg
+					? `<img class="season-cast-avatar" src="${pImg}" alt="${escapeHtml(p.Name)}" loading="lazy" onError="this.style.display='none'" />`
+					: `<div class="season-cast-avatar" style="background-color:#374151;"></div>`;
 				const pHref = p.Id ? `#/details?id=${p.Id}` : 'javascript:void(0)';
 				const pRole = p.Role || p.Character || p.Type || 'Cast';
 				castCardsHtml += `
 					<a href="${pHref}" class="season-cast-card">
-						<img class="season-cast-avatar" src="${pImg}" alt="${escapeHtml(p.Name)}" onError="this.style.display='none'" />
+						${avatarEl}
 						<span class="season-cast-name">${escapeHtml(p.Name)}</span>
 						<span class="season-cast-role">${escapeHtml(pRole)}</span>
 					</a>
@@ -4545,11 +4664,14 @@
 			let castCards = '';
 			castPeople.slice(0, 16).forEach(p => {
 				const pImg = p.PrimaryImageTag ? `${base}/Items/${p.Id}/Images/Primary?quality=80&fillWidth=150&tag=${p.PrimaryImageTag}&api_key=${token}` : '';
+				const avatarEl = pImg
+					? `<img class="season-cast-avatar" src="${pImg}" alt="${escapeHtml(p.Name)}" loading="lazy" onError="this.style.display='none'" />`
+					: `<div class="season-cast-avatar" style="background-color:#374151;"></div>`;
 				const pHref = p.Id ? `#/details?id=${p.Id}` : 'javascript:void(0)';
 				const pRole = p.Role || p.Character || p.Type || 'Cast';
 				castCards += `
 					<a href="${pHref}" class="season-cast-card">
-						<img class="season-cast-avatar" src="${pImg}" alt="${escapeHtml(p.Name)}" onError="this.style.display='none'" />
+						${avatarEl}
 						<span class="season-cast-name">${escapeHtml(p.Name)}</span>
 						<span class="season-cast-role">${escapeHtml(pRole)}</span>
 					</a>
@@ -4690,14 +4812,14 @@
 			return;
 		}
 
-		if (isEnhancing) return;
-		isEnhancing = true;
+		const mySeq = ++enhanceSeq;
 
 		try {
 			if (shouldBypass && itemId) {
 				delete itemCache[itemId];
 			}
 			const item = await fetchItemDetails(itemId, shouldBypass);
+			if (mySeq !== enhanceSeq || resolveItemId() !== itemId || !page.isConnected) return;
 			if (!item) {
 				cleanUpCustomMovieLayout(page);
 				page.removeAttribute('data-enhanced-item-id');
@@ -4708,8 +4830,10 @@
 
 			if (itemType === 'person') {
 				// PERSON / ACTOR ITEM
+				stopHeroThemeMedia(page);
 				page.querySelectorAll('.movie-custom-wrapper, .person-custom-wrapper, .collection-custom-wrapper, .series-custom-wrapper, .season-custom-wrapper, .episode-custom-wrapper').forEach(el => el.remove());
 				await renderPersonCustomLayout(page, item, itemId);
+				if (mySeq !== enhanceSeq || resolveItemId() !== itemId) return;
 				page.classList.remove('is-not-movie', 'is-movie-item-page', 'is-collection-item-page', 'is-series-item-page', 'is-season-item-page', 'is-episode-item-page');
 				page.classList.add('is-person-item-page');
 				page.setAttribute('data-enhanced-item-id', itemId);
@@ -4718,8 +4842,10 @@
 
 			if (itemType === 'boxset' || itemType === 'boxsetitem' || itemType === 'collection') {
 				// COLLECTION / BOXSET ITEM
+				stopHeroThemeMedia(page);
 				page.querySelectorAll('.movie-custom-wrapper, .person-custom-wrapper, .collection-custom-wrapper, .series-custom-wrapper, .season-custom-wrapper, .episode-custom-wrapper').forEach(el => el.remove());
 				await renderCollectionCustomLayout(page, item, itemId);
+				if (mySeq !== enhanceSeq || resolveItemId() !== itemId) return;
 				page.classList.remove('is-not-movie', 'is-movie-item-page', 'is-person-item-page', 'is-series-item-page', 'is-season-item-page', 'is-episode-item-page');
 				page.classList.add('is-collection-item-page');
 				page.setAttribute('data-enhanced-item-id', itemId);
@@ -4728,8 +4854,10 @@
 
 			if (itemType === 'series' || itemType === 'tvshow' || itemType === 'show') {
 				// TV SERIES ITEM
+				stopHeroThemeMedia(page);
 				page.querySelectorAll('.movie-custom-wrapper, .person-custom-wrapper, .collection-custom-wrapper, .series-custom-wrapper, .season-custom-wrapper, .episode-custom-wrapper').forEach(el => el.remove());
 				await renderSeriesCustomLayout(page, item, itemId);
+				if (mySeq !== enhanceSeq || resolveItemId() !== itemId) return;
 				page.classList.remove('is-not-movie', 'is-movie-item-page', 'is-person-item-page', 'is-collection-item-page', 'is-season-item-page', 'is-episode-item-page');
 				page.classList.add('is-series-item-page');
 				page.setAttribute('data-enhanced-item-id', itemId);
@@ -4738,8 +4866,10 @@
 
 			if (itemType === 'season' || itemType === 'seasonitem') {
 				// TV SEASON ITEM (EPISODES LIST)
+				stopHeroThemeMedia(page);
 				page.querySelectorAll('.movie-custom-wrapper, .person-custom-wrapper, .collection-custom-wrapper, .series-custom-wrapper, .season-custom-wrapper, .episode-custom-wrapper').forEach(el => el.remove());
 				await renderSeasonCustomLayout(page, item, itemId);
+				if (mySeq !== enhanceSeq || resolveItemId() !== itemId) return;
 				page.classList.remove('is-not-movie', 'is-movie-item-page', 'is-person-item-page', 'is-collection-item-page', 'is-series-item-page', 'is-episode-item-page');
 				page.classList.add('is-season-item-page');
 				page.setAttribute('data-enhanced-item-id', itemId);
@@ -4748,8 +4878,10 @@
 
 			if (itemType === 'episode' || itemType === 'episodeitem') {
 				// TV EPISODE ITEM
+				stopHeroThemeMedia(page);
 				page.querySelectorAll('.movie-custom-wrapper, .person-custom-wrapper, .collection-custom-wrapper, .series-custom-wrapper, .season-custom-wrapper, .episode-custom-wrapper').forEach(el => el.remove());
 				await renderEpisodeCustomLayout(page, item, itemId);
+				if (mySeq !== enhanceSeq || resolveItemId() !== itemId) return;
 				page.classList.remove('is-not-movie', 'is-movie-item-page', 'is-person-item-page', 'is-collection-item-page', 'is-series-item-page', 'is-season-item-page');
 				page.classList.add('is-episode-item-page');
 				page.setAttribute('data-enhanced-item-id', itemId);
@@ -4763,6 +4895,7 @@
 			}
 
 			// MOVIE ITEM
+			stopHeroThemeMedia(page);
 			page.querySelectorAll('.movie-custom-wrapper, .person-custom-wrapper, .collection-custom-wrapper, .series-custom-wrapper, .season-custom-wrapper, .episode-custom-wrapper').forEach(el => el.remove());
 
 			const { token } = getAuth();
@@ -4773,7 +4906,7 @@
 			if (!backdropUrl) backdropUrl = posterUrl;
 
 			const logoUrl = getImageUrl(item, 'Logo', base, token);
-			const hasLogoImage = Boolean(item.ImageTags?.Logo || item.HasLogo || item.ParentLogoImageTag || item.SeriesLogoImageTag || !item.ImageTags);
+			const hasLogoImage = Boolean(logoUrl && (item.ImageTags?.Logo || item.HasLogo || item.ParentLogoImageTag || item.SeriesLogoImageTag));
 			const galleryPhotoUrls = getBackdropUrls(item, base, token);
 
 			const year = item.ProductionYear || (item.PremiereDate ? new Date(item.PremiereDate).getFullYear() : '2016');
@@ -4861,11 +4994,14 @@
 			if (primaryCast.length) {
 				primaryCast.forEach(p => {
 					const pImgTag = p.PrimaryImageTag ? `${base}/Items/${p.Id}/Images/Primary?quality=80&fillWidth=100&tag=${p.PrimaryImageTag}&api_key=${token}` : '';
+					const avatarHtml = pImgTag
+						? `<img class="cast-img" src="${pImgTag}" alt="${escapeHtml(p.Name)}" loading="lazy" onError="this.style.backgroundColor='#374151'" />`
+						: `<div class="cast-img" style="background-color:#374151;"></div>`;
 					const personHref = p.Id ? `#/details?id=${p.Id}` : 'javascript:void(0)';
 					const roleName = p.Role || p.Character || p.RoleName || '';
 					castItemsHtml += `
 						<a href="${personHref}" class="cast-item">
-							<img class="cast-img" src="${pImgTag}" alt="${escapeHtml(p.Name)}" onError="this.style.backgroundColor='#374151'" />
+							${avatarHtml}
 							<div class="cast-info-col">
 								<span class="cast-name-text">${escapeHtml(p.Name)}</span>
 								${roleName ? `<span class="cast-role-text">${escapeHtml(roleName)}</span>` : ''}
@@ -4884,11 +5020,14 @@
 			if (extraCast.length) {
 				extraCast.forEach(p => {
 					const pImgTag = p.PrimaryImageTag ? `${base}/Items/${p.Id}/Images/Primary?quality=80&fillWidth=100&tag=${p.PrimaryImageTag}&api_key=${token}` : '';
+					const avatarHtml = pImgTag
+						? `<img class="cast-img" src="${pImgTag}" alt="${escapeHtml(p.Name)}" loading="lazy" onError="this.style.backgroundColor='#374151'" />`
+						: `<div class="cast-img" style="background-color:#374151;"></div>`;
 					const personHref = p.Id ? `#/details?id=${p.Id}` : 'javascript:void(0)';
 					const roleName = p.Role || p.Character || p.RoleName || '';
 					extraCastHtml += `
 						<a href="${personHref}" class="cast-item cast-item-horizontal">
-							<img class="cast-img" src="${pImgTag}" alt="${escapeHtml(p.Name)}" onError="this.style.backgroundColor='#374151'" />
+							${avatarHtml}
 							<div class="cast-info-col">
 								<span class="cast-name-text">${escapeHtml(p.Name)}</span>
 								${roleName ? `<span class="cast-role-text">${escapeHtml(roleName)}</span>` : ''}
@@ -4924,10 +5063,10 @@
 
 			let thumbsRowHtml = '';
 			if (thumb1) {
-				thumbsRowHtml += `<div class="thumb-box" id="gallery-photo-1" title="View Movie Photo"><img src="${thumb1}" alt="" /></div>`;
+				thumbsRowHtml += `<div class="thumb-box" id="gallery-photo-1" title="View Movie Photo"><img src="${toGalleryThumbUrl(thumb1)}" loading="lazy" decoding="async" alt="" /></div>`;
 			}
 			if (thumb2) {
-				thumbsRowHtml += `<div class="thumb-box" id="gallery-photo-2" title="View Movie Photo"><img src="${thumb2}" alt="" /></div>`;
+				thumbsRowHtml += `<div class="thumb-box" id="gallery-photo-2" title="View Movie Photo"><img src="${toGalleryThumbUrl(thumb2)}" loading="lazy" decoding="async" alt="" /></div>`;
 			}
 			if (hasMore && remainingCount > 0) {
 				thumbsRowHtml += `<div class="thumb-box-more" id="gallery-photo-more" title="View All Photos">+${remainingCount}</div>`;
@@ -4937,7 +5076,7 @@
 				<section class="right-col">
 					<h3 class="section-heading">Gallery</h3>
 					<div class="gallery-featured-photo" id="gallery-photo-main" title="View Movie Photo">
-						<img src="${featuredPhoto}" alt="Movie Photo" />
+						<img src="${toGalleryThumbUrl(featuredPhoto)}" loading="lazy" decoding="async" alt="Movie Photo" />
 					</div>
 					${thumbsRowHtml ? `<div class="gallery-thumbs-row">${thumbsRowHtml}</div>` : ''}
 				</section>
@@ -5156,8 +5295,6 @@
 
 		} catch (err) {
 			console.warn('[Movie Details] Error enhancing page:', err);
-		} finally {
-			isEnhancing = false;
 		}
 	}
 
@@ -5295,7 +5432,11 @@
 		document.addEventListener('pointerdown', handleGlobalTouchOrClick, { passive: true });
 		document.addEventListener('touchstart', handleGlobalTouchOrClick, { passive: true });
 		document.addEventListener('click', handleGlobalTouchOrClick, { passive: true });
-		window.addEventListener('resize', setupMobileHeaderMenu, { passive: true });
+		let mobileResizeTimer = null;
+		window.addEventListener('resize', () => {
+			clearTimeout(mobileResizeTimer);
+			mobileResizeTimer = setTimeout(setupMobileHeaderMenu, 120);
+		}, { passive: true });
 	}
 
 	let playerToastTimer = null;
@@ -5311,10 +5452,23 @@
 		const pillContent = document.getElementById('abyss-hud-pill-content');
 		if (!pillContent || !pillHUD) return;
 		clearTimeout(playerToastTimer);
-		pillContent.innerHTML = `
-			${iconSvg ? `<div class="abyss-hud-icon-wrap">${iconSvg}</div>` : ''}
-			<div class="abyss-hud-val-text">${text}</div>
-		`;
+		if (pillContent._hudMode !== 'toast') {
+			pillContent._hudMode = 'toast';
+			pillContent.innerHTML = `<div class="abyss-hud-icon-wrap"></div><div class="abyss-hud-val-text"></div>`;
+			pillContent._toastIcon = pillContent.querySelector('.abyss-hud-icon-wrap');
+			pillContent._toastText = pillContent.querySelector('.abyss-hud-val-text');
+			pillContent._lastSvg = null;
+		}
+		if (pillContent._toastIcon) {
+			pillContent._toastIcon.style.display = iconSvg ? '' : 'none';
+			if (iconSvg && pillContent._lastSvg !== iconSvg) {
+				pillContent._lastSvg = iconSvg;
+				pillContent._toastIcon.innerHTML = iconSvg;
+			}
+		}
+		if (pillContent._toastText && pillContent._toastText.textContent !== text) {
+			pillContent._toastText.textContent = text;
+		}
 		pillHUD.classList.add('abyss-hud-visible');
 		playerToastTimer = setTimeout(() => {
 			pillHUD.classList.remove('abyss-hud-visible');
@@ -5645,6 +5799,7 @@
 	let boundVideoEl = null;
 
 	function getMainPlayerVideo() {
+		if (boundVideoEl && boundVideoEl.isConnected) return boundVideoEl;
 		return document.querySelector('#videoOsdPage video, .videoOsdPage video, video.htmlvideoplayer, .videoPlayerContainer video') ||
 			document.querySelector('video:not(.abyss-card-trailer-video):not(#abyss-theme-video-player):not(.hero-theme-video)');
 	}
@@ -5929,6 +6084,7 @@
 
 	let isOsdSyncScheduled = false;
 	function scheduleOsdSync() {
+		if (isVideoOsdCurrentlyHidden() && !isDraggingSeek && !isDraggingVol) return;
 		if (isOsdSyncScheduled) return;
 		isOsdSyncScheduled = true;
 		requestAnimationFrame(() => {
@@ -6368,7 +6524,19 @@
 	function applyExactVideoPlayerDesign() {
 		const active = isVideoOsdPageActive();
 		syncOsdHeaderVisibility();
-		if (!active) return;
+		if (!active) {
+			if (boundVideoEl) {
+				try { boundVideoEl.style.removeProperty('filter'); } catch (e) { }
+				boundVideoEl = null;
+			}
+			__abyssBrightnessVal = 1.0;
+			const brightOv = document.getElementById('abyss-brightness-overlay');
+			if (brightOv) {
+				brightOv.style.opacity = '0';
+				brightOv.style.display = 'none';
+			}
+			return;
+		}
 
 		// Ensure any background hero theme video/audio is completely stopped while the main player is active
 		if (document.querySelector('.hero-theme-video, .hero-theme-iframe') || isJmpMpvHeroPlaying) {
@@ -6530,9 +6698,9 @@
 			const volInput = customBar.querySelector('.abyss-vol-input');
 			const btnVol = customBar.querySelector('.abyss-btn-vol');
 
-			const computeVolPctFromClientX = (clientX) => {
+			const computeVolPctFromClientX = (clientX, rectOverride) => {
 				if (!volWrap) return null;
-				const rect = volWrap.getBoundingClientRect();
+				const rect = rectOverride || volWrap.getBoundingClientRect();
 				if (!(rect.width > 0)) return null;
 				const rawRatio = (clientX - rect.left) / rect.width;
 				return Math.max(0, Math.min(100, Math.round(rawRatio * 100)));
@@ -6541,9 +6709,12 @@
 			if (volWrap && !volWrap.dataset.bound) {
 				volWrap.dataset.bound = 'true';
 				let activeVolPointerId = null;
+				let cachedVolRect = null;
+				let volMoveRafId = 0;
+				let latestVolClientX = 0;
 
 				const applyPointerVolume = (clientX, showHud = true) => {
-					const pct = computeVolPctFromClientX(clientX);
+					const pct = computeVolPctFromClientX(clientX, cachedVolRect);
 					if (pct === null) return;
 					setPlayerVolumePct(pct, showHud, customBar);
 				};
@@ -6554,6 +6725,7 @@
 					e.stopPropagation();
 					isDraggingVol = true;
 					activeVolPointerId = e.pointerId;
+					cachedVolRect = volWrap.getBoundingClientRect();
 					if (typeof volWrap.setPointerCapture === 'function') {
 						try { volWrap.setPointerCapture(e.pointerId); } catch (err) { }
 					}
@@ -6565,12 +6737,25 @@
 					if (activeVolPointerId !== null && e.pointerId !== activeVolPointerId) return;
 					e.preventDefault();
 					e.stopPropagation();
-					applyPointerVolume(e.clientX, true);
+					latestVolClientX = e.clientX;
+					if (!volMoveRafId) {
+						volMoveRafId = requestAnimationFrame(() => {
+							volMoveRafId = 0;
+							if (isDraggingVol) {
+								applyPointerVolume(latestVolClientX, true);
+							}
+						});
+					}
 				});
 
 				const finishVolPointer = (e) => {
 					if (!isDraggingVol) return;
 					if (activeVolPointerId !== null && e.pointerId !== undefined && e.pointerId !== activeVolPointerId) return;
+					if (volMoveRafId) {
+						cancelAnimationFrame(volMoveRafId);
+						volMoveRafId = 0;
+					}
+					cachedVolRect = null;
 					if (activeVolPointerId !== null && typeof volWrap.releasePointerCapture === 'function') {
 						try { volWrap.releasePointerCapture(activeVolPointerId); } catch (err) { }
 					}
@@ -6980,56 +7165,114 @@
 		const vEl = video();
 		if (vEl) vEl.addEventListener('dblclick', blockDblClickIfGesture, true);
 
-		const showPillHUD = (html) => {
+		const showHudVisible = () => {
 			clearTimeout(hudTimeout);
-			pillContent.innerHTML = html;
 			hud.classList.add('abyss-hud-visible');
 			hudTimeout = setTimeout(() => {
 				hud.classList.remove('abyss-hud-visible');
 			}, 900);
 		};
 
+		const showPillHUD = (html) => {
+			pillContent._hudMode = 'raw';
+			pillContent.innerHTML = html;
+			showHudVisible();
+		};
+
+		const ensureBarHudNodes = (mode, iconKey, iconSvg) => {
+			if (pillContent._hudMode !== mode) {
+				pillContent._hudMode = mode;
+				pillContent.innerHTML = `<div class="abyss-hud-icon-wrap"></div><div class="abyss-hud-bar-bg"><div class="abyss-hud-bar-fill"></div></div><div class="abyss-hud-val-text"></div>`;
+				pillContent._barIconWrap = pillContent.querySelector('.abyss-hud-icon-wrap');
+				pillContent._barFill = pillContent.querySelector('.abyss-hud-bar-fill');
+				pillContent._barVal = pillContent.querySelector('.abyss-hud-val-text');
+				pillContent._barIconKey = null;
+			}
+			if (pillContent._barIconKey !== iconKey && pillContent._barIconWrap) {
+				pillContent._barIconKey = iconKey;
+				pillContent._barIconWrap.innerHTML = iconSvg;
+			}
+		};
+
 		const showVolumeHUD = (pct, isMuted) => {
 			const p = Math.max(0, Math.min(100, Math.round(pct)));
-			const iconSvg = isMuted || p === 0
+			const iconKey = (isMuted || p === 0) ? 'mute' : (p < 50 ? 'low' : 'high');
+			const iconSvg = iconKey === 'mute'
 				? `<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>`
-				: (p < 50
+				: (iconKey === 'low'
 					? `<svg viewBox="0 0 24 24"><path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/></svg>`
 					: `<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L9 9H5zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`);
 
-			showPillHUD(`
-					<div class="abyss-hud-icon-wrap">${iconSvg}</div>
-					<div class="abyss-hud-bar-bg"><div class="abyss-hud-bar-fill" style="width:${p}%;"></div></div>
-					<div class="abyss-hud-val-text">${p}%</div>
-				`);
+			ensureBarHudNodes('vol', iconKey, iconSvg);
+			if (pillContent._barFill) pillContent._barFill.style.width = `${p}%`;
+			if (pillContent._barVal) pillContent._barVal.textContent = `${p}%`;
+			showHudVisible();
 		};
 
 		const showBrightnessHUD = (pct) => {
 			const p = Math.max(0, Math.min(100, Math.round(pct)));
 			const iconSvg = `<svg viewBox="0 0 24 24"><path d="M20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69zM12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z"/></svg>`;
 
-			showPillHUD(`
-					<div class="abyss-hud-icon-wrap">${iconSvg}</div>
-					<div class="abyss-hud-bar-bg"><div class="abyss-hud-bar-fill" style="width:${p}%;"></div></div>
-					<div class="abyss-hud-val-text">${p}%</div>
-				`);
+			ensureBarHudNodes('bright', 'bright', iconSvg);
+			if (pillContent._barFill) pillContent._barFill.style.width = `${p}%`;
+			if (pillContent._barVal) pillContent._barVal.textContent = `${p}%`;
+			showHudVisible();
 		};
 
 		const showSeekHUD = (targetTime, deltaSecs, duration) => {
 			const sign = deltaSecs >= 0 ? '+' : '';
-			const iconSvg = deltaSecs >= 0
-				? `<svg viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/></svg>`
-				: `<svg viewBox="0 0 24 24"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/></svg>`;
+			const dirKey = deltaSecs >= 0 ? 'fwd' : 'rew';
+			if (pillContent._hudMode !== 'seek') {
+				pillContent._hudMode = 'seek';
+				pillContent.innerHTML = `<div class="abyss-hud-icon-wrap"></div><div class="abyss-hud-seek-info"><span></span><span style="opacity:0.6;">/</span><span style="opacity:0.8;"></span><span class="abyss-hud-seek-delta"></span></div>`;
+				pillContent._seekIcon = pillContent.querySelector('.abyss-hud-icon-wrap');
+				const infoSpans = pillContent.querySelectorAll('.abyss-hud-seek-info > span');
+				pillContent._seekCurr = infoSpans[0];
+				pillContent._seekDur = infoSpans[2];
+				pillContent._seekDelta = infoSpans[3];
+				pillContent._seekDirKey = null;
+			}
+			if (pillContent._seekDirKey !== dirKey && pillContent._seekIcon) {
+				pillContent._seekDirKey = dirKey;
+				pillContent._seekIcon.innerHTML = deltaSecs >= 0
+					? `<svg viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/></svg>`
+					: `<svg viewBox="0 0 24 24"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/></svg>`;
+			}
+			if (pillContent._seekCurr) pillContent._seekCurr.textContent = formatTime(targetTime);
+			if (pillContent._seekDur) pillContent._seekDur.textContent = formatTime(duration);
+			if (pillContent._seekDelta) pillContent._seekDelta.textContent = `(${sign}${Math.round(deltaSecs)}s)`;
+			showHudVisible();
+		};
 
-			showPillHUD(`
-					<div class="abyss-hud-icon-wrap">${iconSvg}</div>
-					<div class="abyss-hud-seek-info">
-						<span>${formatTime(targetTime)}</span>
-						<span style="opacity:0.6;">/</span>
-						<span style="opacity:0.8;">${formatTime(duration)}</span>
-						<span class="abyss-hud-seek-delta">(${sign}${Math.round(deltaSecs)}s)</span>
-					</div>
-				`);
+		const applyVideoBrightness = (newBright, v) => {
+			let brightOv = document.getElementById('abyss-brightness-overlay');
+			if (newBright <= 1.0) {
+				if (v) v.style.removeProperty('filter');
+				if (newBright >= 0.99) {
+					if (brightOv) {
+						brightOv.style.opacity = '0';
+						brightOv.style.display = 'none';
+					}
+				} else {
+					if (!brightOv) {
+						brightOv = document.createElement('div');
+						brightOv.id = 'abyss-brightness-overlay';
+						brightOv.className = 'abyss-brightness-overlay';
+						document.body.appendChild(brightOv);
+					}
+					brightOv.style.display = 'block';
+					brightOv.style.backgroundColor = '#000000';
+					brightOv.style.opacity = String(Math.max(0, Math.min(0.7, 1 - newBright)));
+				}
+			} else {
+				if (brightOv) {
+					brightOv.style.opacity = '0';
+					brightOv.style.display = 'none';
+				}
+				if (v) {
+					v.style.setProperty('filter', `brightness(${newBright})`, 'important');
+				}
+			}
 		};
 
 		const triggerRipple = (side) => {
@@ -7042,6 +7285,11 @@
 				ripple.classList.remove('abyss-ripple-active');
 			}, 450);
 		};
+
+		let cachedTouchRect = null;
+		let touchMoveRafId = 0;
+		let latestTouchX = 0;
+		let latestTouchY = 0;
 
 		videoContainer.addEventListener('touchstart', (e) => {
 			if (e.touches.length !== 1) return;
@@ -7057,6 +7305,7 @@
 			const pm = getInternalPlaybackManager();
 			const { curSecs } = getPlayerTiming();
 
+			cachedTouchRect = videoContainer.getBoundingClientRect();
 			startX = touch.clientX;
 			startY = touch.clientY;
 
@@ -7079,7 +7328,7 @@
 				clearTimeout(resetDoubleTapTimer);
 				resetDoubleTapTimer = setTimeout(() => { isGestureDoubleTap = false; }, 400);
 
-				const rect = videoContainer.getBoundingClientRect();
+				const rect = cachedTouchRect || videoContainer.getBoundingClientRect();
 				const relX = touch.clientX - rect.left;
 				if (relX < rect.width * 0.35) {
 					doSeekDelta(-10);
@@ -7105,15 +7354,11 @@
 			lastTapY = touch.clientY;
 		}, { passive: true });
 
-		videoContainer.addEventListener('touchmove', (e) => {
-			if (e.touches.length !== 1) return;
-			if (isInteractiveTarget(e.target)) return;
-
-			const touch = e.touches[0];
-			const deltaX = touch.clientX - startX;
-			const deltaY = touch.clientY - startY;
-
-			const rect = videoContainer.getBoundingClientRect();
+		const processTouchSwipeFrame = () => {
+			touchMoveRafId = 0;
+			const rect = cachedTouchRect || videoContainer.getBoundingClientRect();
+			const deltaX = latestTouchX - startX;
+			const deltaY = latestTouchY - startY;
 			const relX = startX - rect.left;
 			const v = video();
 
@@ -7138,9 +7383,7 @@
 				const change = (-deltaY / (rect.height || 300)) * 1.4;
 				const newBright = Math.max(0.3, Math.min(1.8, initialBright + change));
 				__abyssBrightnessVal = newBright;
-				if (v) {
-					v.style.setProperty('filter', `brightness(${newBright})`, 'important');
-				}
+				applyVideoBrightness(newBright, v);
 				showBrightnessHUD(((newBright - 0.3) / 1.5) * 100);
 			} else if (gestureType === 'seek') {
 				const { durSecs, durTicks } = getPlayerTiming();
@@ -7153,9 +7396,25 @@
 				}
 				showSeekHUD(targetTime, targetTime - initialTime, duration || 0);
 			}
+		};
+
+		videoContainer.addEventListener('touchmove', (e) => {
+			if (e.touches.length !== 1) return;
+			if (isInteractiveTarget(e.target)) return;
+			latestTouchX = e.touches[0].clientX;
+			latestTouchY = e.touches[0].clientY;
+			if (!touchMoveRafId) {
+				touchMoveRafId = requestAnimationFrame(processTouchSwipeFrame);
+			}
 		}, { passive: true });
 
 		videoContainer.addEventListener('touchend', () => {
+			if (touchMoveRafId) {
+				cancelAnimationFrame(touchMoveRafId);
+				touchMoveRafId = 0;
+				processTouchSwipeFrame();
+			}
+			cachedTouchRect = null;
 			if (gestureType === 'seek' && currentSeekTargetTime !== null) {
 				const { durTicks } = getPlayerTiming();
 				const targetTicks = Math.round(currentSeekTargetTime * 10000000);
@@ -7271,10 +7530,13 @@
 	document.addEventListener('apiclientready', () => triggerEnhance());
 	document.addEventListener('DOMContentLoaded', () => triggerEnhance());
 
+	let lastDetailItemIdForMedia = resolveItemId();
 	window.addEventListener('hashchange', () => {
-		if (!window.location.hash.includes('details')) {
+		const nextId = resolveItemId();
+		if (!window.location.hash.includes('details') || nextId !== lastDetailItemIdForMedia) {
 			stopHeroThemeMedia();
 		}
+		lastDetailItemIdForMedia = nextId;
 		triggerEnhance();
 		syncPageFavoriteButtons();
 		setTimeout(triggerEnhance, 120);
@@ -7421,9 +7683,16 @@
 		} catch (e) { }
 	}
 
-	setTimeout(checkAndApplyLiveVersionUpdate, 800);
+	let lastVersionCheckTime = Date.now();
+	setTimeout(() => {
+		lastVersionCheckTime = Date.now();
+		checkAndApplyLiveVersionUpdate();
+	}, 800);
 	document.addEventListener('visibilitychange', () => {
-		if (!document.hidden) checkAndApplyLiveVersionUpdate();
+		if (!document.hidden && (Date.now() - lastVersionCheckTime > 600000)) {
+			lastVersionCheckTime = Date.now();
+			checkAndApplyLiveVersionUpdate();
+		}
 	});
 
 	// Unified reactive page & dialog observer for seamless SPA navigation
@@ -7439,10 +7708,10 @@
 				if (m.removedNodes && m.removedNodes.length) {
 					for (const node of m.removedNodes) {
 						if (node.nodeType === 1) {
-							const isDialog = node.classList?.contains('dialogContainer') ||
+							const isDialogContainer = node.classList?.contains('dialogContainer') || node.classList?.contains('dialog');
+							const isDialog = isDialogContainer ||
 								node.classList?.contains('editImagesDialog') ||
-								node.classList?.contains('dialog') ||
-								node.querySelector?.('.editImagesDialog');
+								(isDialogContainer && node.querySelector?.('.editImagesDialog'));
 							if (isDialog) {
 								shouldRefreshAfterDialog = true;
 							}
@@ -7450,7 +7719,7 @@
 					}
 				}
 				if (m.addedNodes && m.addedNodes.length) {
-					if (m.target && m.target.closest && m.target.closest('.itemsContainer, .card, .scrollSlider, .library-hero-banner, .abyss-custom-osd-bar, .abyss-gesture-hud, .movie-custom-wrapper, .series-custom-wrapper, .season-custom-wrapper, .episode-custom-wrapper, .person-custom-wrapper')) {
+					if (m.target && m.target.closest && m.target.closest('.itemsContainer, .card, .scrollSlider, .library-hero-banner, .abyss-custom-osd-bar, .abyss-gesture-hud, .videoSubtitles, .videoSubtitlesInner, .mdl-slider-container, .movie-custom-wrapper, .series-custom-wrapper, .season-custom-wrapper, .episode-custom-wrapper, .person-custom-wrapper')) {
 						continue;
 					}
 					for (const node of m.addedNodes) {
@@ -7458,13 +7727,14 @@
 							if (node.classList?.contains('card') || node.classList?.contains('abyss-card-trailer-stage')) {
 								continue;
 							}
-							if (node.tagName === 'VIDEO' || node.id === 'videoOsdPage' || node.classList?.contains('videoOsdBottom') || node.querySelector?.('#videoOsdPage, .videoOsdBottom, video.htmlvideoplayer')) {
+							const hasChildren = node.childElementCount > 0;
+							if (node.tagName === 'VIDEO' || node.id === 'videoOsdPage' || node.classList?.contains('videoOsdBottom') || (hasChildren && node.querySelector?.('#videoOsdPage, .videoOsdBottom, video.htmlvideoplayer'))) {
 								shouldInitVideo = true;
 							}
-							if (node.id === 'itemDetailPage' || node.classList?.contains('page') || node.classList?.contains('itemDetailPage') || node.querySelector?.('#itemDetailPage, .itemDetailPage')) {
+							if (node.id === 'itemDetailPage' || node.classList?.contains('page') || node.classList?.contains('itemDetailPage') || (hasChildren && node.querySelector?.('#itemDetailPage, .itemDetailPage'))) {
 								shouldTriggerPage = true;
 							}
-							if (node.classList?.contains('featurediframe') || node.id === 'indexPage' || node.id === 'homeTab' || node.querySelector?.('iframe.featurediframe')) {
+							if (node.classList?.contains('featurediframe') || node.id === 'indexPage' || node.id === 'homeTab' || (hasChildren && node.querySelector?.('iframe.featurediframe'))) {
 								shouldSyncSpotlight = true;
 							}
 						}
@@ -7472,7 +7742,9 @@
 				}
 			} else if (m.type === 'attributes') {
 				if (m.target.id === 'itemDetailPage' || m.target.classList?.contains('itemDetailPage')) {
-					shouldTriggerPage = true;
+					if (m.target.classList.contains('hide') || m.target.getAttribute('data-enhanced-item-id') !== resolveItemId()) {
+						shouldTriggerPage = true;
+					}
 				} else if (m.target.id === 'indexPage' || m.target.id === 'homeTab') {
 					shouldSyncSpotlight = true;
 				} else if (m.target.id === 'videoOsdPage') {
@@ -7519,14 +7791,19 @@
 			events.on('itemupdated', () => triggerEnhance(true));
 		} catch (e) { }
 	}
-	// Lightweight fallback video playback watcher (skips when tab is hidden or not on video player)
+	// Lightweight fallback video playback watcher (skips when tab is hidden or already initialized)
 	setInterval(() => {
 		if (document.hidden) return;
 		if (isVideoOsdPageActive()) {
+			if (!document.querySelector('.abyss-custom-osd-bar') || !boundVideoEl || !boundVideoEl.isConnected) {
+				applyExactVideoPlayerDesign();
+			}
+			const osdContainer = document.querySelector('#videoOsdPage, .videoOsdPage');
+			if (osdContainer && osdContainer.dataset.abyssGesturesActive !== 'true') {
+				initMobileVideoGestures();
+			}
+		} else if (document.body.classList.contains('abyss-video-playing') || document.body.classList.contains('abyss-osd-hidden') || boundVideoEl) {
 			applyExactVideoPlayerDesign();
-			initMobileVideoGestures();
-		} else if (document.body.classList.contains('abyss-video-playing') || document.body.classList.contains('abyss-osd-hidden')) {
-			syncOsdHeaderVisibility();
 		}
 	}, 1000);
 
@@ -7578,11 +7855,18 @@
 		) {
 			return false;
 		}
-		const scalable = card.querySelector('.cardScalable');
-		if (!scalable || scalable.offsetWidth < 60 || scalable.offsetHeight < 80) return false;
+		const isNonPortraitClass = card.classList.contains('backdropCard') ||
+			card.classList.contains('overflowBackdropCard') ||
+			card.classList.contains('squareCard') ||
+			card.classList.contains('overflowSquareCard');
+		if (isNonPortraitClass) return false;
 		const isPortraitClass = card.classList.contains('portraitCard') || card.classList.contains('overflowPortraitCard');
-		const isPortraitRatio = scalable.offsetHeight > scalable.offsetWidth * 1.12;
-		if (!isPortraitClass && !isPortraitRatio) return false;
+		const scalable = card.querySelector('.cardScalable');
+		if (!scalable) return false;
+		if (!isPortraitClass) {
+			if (scalable.offsetWidth < 60 || scalable.offsetHeight < 80) return false;
+			if (!(scalable.offsetHeight > scalable.offsetWidth * 1.12)) return false;
+		}
 		return Boolean(extractCardItemId(card));
 	}
 
@@ -7632,10 +7916,10 @@
 				preLogo.src = logoUrl;
 			}
 
-			// 2. Check Local Trailers first (fast single endpoint, only if HTML5 video supports MP4 H.264)
-			const canPlayMp4 = Boolean(document.createElement('video').canPlayType('video/mp4; codecs="avc1.42E01E"'));
+			// 2. Check Local Trailers first (fast single endpoint, only if item may have local trailers & MP4 H.264 supported)
+			const canPlayMp4 = CAN_PLAY_H264;
 			let streamUrl = null;
-			if (token && userId && canPlayMp4) {
+			if (token && userId && canPlayMp4 && (!item || item.LocalTrailerCount === undefined || item.LocalTrailerCount > 0)) {
 				try {
 					const localRes = await fetch(`${base}/Users/${userId}/Items/${itemId}/LocalTrailers?api_key=${encodeURIComponent(token)}`, { headers });
 					if (localRes.ok) {
@@ -7698,11 +7982,11 @@
 				streamUrl,
 				youtubeId
 			};
-			cardTrailerDataCache.set(itemId, result);
+			lruSetMap(cardTrailerDataCache, itemId, result, 100);
 			return result;
 		})();
 
-		cardTrailerDataCache.set(itemId, pendingPromise);
+		lruSetMap(cardTrailerDataCache, itemId, pendingPromise, 100);
 		return pendingPromise;
 	}
 
@@ -8076,10 +8360,13 @@
 	}
 
 	function initHoverCardTrailerSystem() {
+		let lastPointerCardEl = null;
+
 		document.addEventListener('pointerover', (e) => {
 			if (e.pointerType === 'touch') return;
 			const card = e.target?.closest?.('.card');
-			if (card === hoveredCardEl) return;
+			if (card === hoveredCardEl || (card && card === lastPointerCardEl)) return;
+			lastPointerCardEl = card || null;
 
 			clearHoverCardTimers();
 
@@ -8096,12 +8383,12 @@
 			const itemId = extractCardItemId(card);
 			if (!itemId) return;
 
-			// Prefetch trailer metadata & preload backdrop at 700ms so 2000ms expansion is instant
+			// Prefetch trailer metadata & preload backdrop at 1100ms so 2000ms expansion is instant without hover-scrubbing waste
 			hoverPrefetchTimer = setTimeout(() => {
 				if (hoveredCardEl === card && !document.hidden) {
 					resolveCardTrailerData(itemId).catch(() => { });
 				}
-			}, 700);
+			}, 1100);
 
 			// Morph portrait card into wide 16:9 trailer card after exact 2000ms hover
 			hoverExpandTimer = setTimeout(() => {
@@ -8112,8 +8399,11 @@
 		}, { passive: true });
 
 		document.addEventListener('pointerout', (e) => {
-			if (!hoveredCardEl) return;
 			const related = e.relatedTarget;
+			if (lastPointerCardEl && (!related || !lastPointerCardEl.contains(related))) {
+				lastPointerCardEl = null;
+			}
+			if (!hoveredCardEl) return;
 			if (related && hoveredCardEl.contains(related)) return;
 
 			const leavingCard = hoveredCardEl;
@@ -8128,6 +8418,14 @@
 				}
 			}, 35);
 		}, { passive: true });
+
+		document.addEventListener('scroll', () => {
+			if (!hoveredCardEl && !activeExpandedCardEl) return;
+			clearHoverCardTimers();
+			if (activeExpandedCardEl) {
+				collapseExpandedCard(activeExpandedCardEl);
+			}
+		}, { capture: true, passive: true });
 
 		// Collapse immediately on page navigation or tab switch to free resources
 		let lastNonDetailHash = '#/home.html';

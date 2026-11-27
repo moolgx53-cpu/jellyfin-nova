@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -20,6 +21,8 @@ public class NovaWebMiddleware
 {
     private const string ResourcePrefix = "Jellyfin.Plugin.Nova.Assets.";
 
+    private static readonly string[] AssetPrefixes = { "/web/ui/", "/web/nova/", "/NovaUI/" };
+
     private static readonly Dictionary<string, string> AssetContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         ["abyss.css"] = "text/css; charset=utf-8",
@@ -33,7 +36,12 @@ public class NovaWebMiddleware
         ["spotlight.css"] = "text/css; charset=utf-8"
     };
 
-    private static readonly ConcurrentDictionary<string, byte[]> CachedAssets = new(StringComparer.OrdinalIgnoreCase);
+    private sealed record AssetEntry(byte[] Raw, byte[] Gzip, byte[] Brotli, string ETag);
+
+    private static readonly ConcurrentDictionary<string, AssetEntry?> CachedAssets = new(StringComparer.OrdinalIgnoreCase);
+
+    private static volatile string? _cachedVersionKey;
+    private static volatile byte[]? _cachedVersionBytes;
 
     private static readonly Regex LegacyAssetTagRegex = new(
         @"<(?:link[^>]+href=[""']ui/(?:abyss|library-banner|movie-details)\.css[^""']*[""'][^>]*>|script[^>]+src=[""']ui/(?:library-banner|movie-details|abyss-state|nova-boot)\.js[^""']*[""'][^>]*>\s*</script>)",
@@ -86,21 +94,21 @@ public class NovaWebMiddleware
     /// </summary>
     /// <param name="context">Current HTTP context.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task InvokeAsync(HttpContext context)
+    public Task InvokeAsync(HttpContext context)
     {
         var plugin = Plugin.Instance;
         var config = plugin?.Configuration;
         if (plugin is null || config is null || !config.Enabled)
         {
-            await _next(context).ConfigureAwait(false);
-            return;
+            return _next(context);
         }
 
         var path = context.Request.Path.Value;
-        if (string.IsNullOrEmpty(path))
+        if (string.IsNullOrEmpty(path)
+            || (path.IndexOf("/web", StringComparison.OrdinalIgnoreCase) < 0
+                && path.IndexOf("/NovaUI", StringComparison.OrdinalIgnoreCase) < 0))
         {
-            await _next(context).ConfigureAwait(false);
-            return;
+            return _next(context);
         }
 
         var method = context.Request.Method;
@@ -109,59 +117,106 @@ public class NovaWebMiddleware
         // 1. Serve embedded Nova assets under /web/ui/{file}, /web/nova/{file}, or /NovaUI/{file}
         if (isGetOrHead && TryExtractAssetFileName(path, out var fileName))
         {
-            if (fileName.Equals("version.json", StringComparison.OrdinalIgnoreCase))
-            {
-                var versionJson = $"{{\"version\":\"{plugin.AssetVersion}\",\"enableSpotlight\":{(config.EnableSpotlight ? "true" : "false")},\"forceDarkTheme\":{(config.ForceDarkTheme ? "true" : "false")}}}";
-                var payload = Encoding.UTF8.GetBytes(versionJson);
-                context.Response.StatusCode = StatusCodes.Status200OK;
-                context.Response.ContentType = "application/json; charset=utf-8";
-                context.Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
-                context.Response.ContentLength = payload.Length;
-                if (HttpMethods.IsGet(method))
-                {
-                    await context.Response.Body.WriteAsync(payload).ConfigureAwait(false);
-                }
-
-                return;
-            }
-
-            if (AssetContentTypes.TryGetValue(fileName, out var contentType))
-            {
-                var bytes = GetEmbeddedAssetBytes(fileName, plugin.AssetVersion);
-                if (bytes is not null)
-                {
-                    context.Response.StatusCode = StatusCodes.Status200OK;
-                    context.Response.ContentType = contentType;
-                    context.Response.Headers["Cache-Control"] = context.Request.Query.ContainsKey("v")
-                        ? "public, max-age=31536000, immutable"
-                        : "no-cache";
-                    context.Response.ContentLength = bytes.Length;
-                    if (HttpMethods.IsGet(method))
-                    {
-                        await context.Response.Body.WriteAsync(bytes).ConfigureAwait(false);
-                    }
-
-                    return;
-                }
-            }
+            return ServeEmbeddedAssetAsync(context, plugin, fileName, method);
         }
 
         // 2. Intercept Jellyfin Web index.html and inject Nova scripts & styles in memory
         if (HttpMethods.IsGet(method) && IsWebIndexRequest(path))
         {
-            await HandleIndexHtmlInjectionAsync(context, plugin).ConfigureAwait(false);
+            return HandleIndexHtmlInjectionAsync(context, plugin);
+        }
+
+        return _next(context);
+    }
+
+    private static async Task ServeEmbeddedAssetAsync(HttpContext context, Plugin plugin, string fileName, string method)
+    {
+        var config = plugin.Configuration;
+        if (fileName.Equals("version.json", StringComparison.OrdinalIgnoreCase))
+        {
+            var verKey = $"{plugin.AssetVersion}:{config.EnableSpotlight}:{config.ForceDarkTheme}";
+            var payload = _cachedVersionBytes;
+            if (payload is null || !string.Equals(_cachedVersionKey, verKey, StringComparison.Ordinal))
+            {
+                var versionJson = $"{{\"version\":\"{plugin.AssetVersion}\",\"enableSpotlight\":{(config.EnableSpotlight ? "true" : "false")},\"forceDarkTheme\":{(config.ForceDarkTheme ? "true" : "false")}}}";
+                payload = Encoding.UTF8.GetBytes(versionJson);
+                _cachedVersionBytes = payload;
+                _cachedVersionKey = verKey;
+            }
+
+            context.Response.StatusCode = StatusCodes.Status200OK;
+            context.Response.ContentType = "application/json; charset=utf-8";
+            context.Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
+            context.Response.ContentLength = payload.Length;
+            if (HttpMethods.IsGet(method))
+            {
+                await context.Response.Body.WriteAsync(payload).ConfigureAwait(false);
+            }
+
             return;
         }
 
-        await _next(context).ConfigureAwait(false);
+        if (!AssetContentTypes.TryGetValue(fileName, out var contentType))
+        {
+            return;
+        }
+
+        var entry = GetEmbeddedAssetEntry(fileName, plugin.AssetVersion);
+        if (entry is null)
+        {
+            return;
+        }
+
+        context.Response.Headers["ETag"] = entry.ETag;
+        context.Response.Headers["Vary"] = "Accept-Encoding";
+        context.Response.Headers["Cache-Control"] = context.Request.Query.ContainsKey("v")
+            ? "public, max-age=31536000, immutable"
+            : "no-cache";
+
+        var ifNoneMatch = context.Request.Headers.IfNoneMatch.ToString();
+        if (!string.IsNullOrEmpty(ifNoneMatch) && ifNoneMatch.Contains(entry.ETag, StringComparison.Ordinal))
+        {
+            context.Response.StatusCode = StatusCodes.Status304NotModified;
+            return;
+        }
+
+        var acceptEncoding = context.Request.Headers.AcceptEncoding.ToString();
+        byte[] responseBytes;
+        string? contentEncoding = null;
+        if (acceptEncoding.Contains("br", StringComparison.OrdinalIgnoreCase) && entry.Brotli.Length < entry.Raw.Length)
+        {
+            responseBytes = entry.Brotli;
+            contentEncoding = "br";
+        }
+        else if (acceptEncoding.Contains("gzip", StringComparison.OrdinalIgnoreCase) && entry.Gzip.Length < entry.Raw.Length)
+        {
+            responseBytes = entry.Gzip;
+            contentEncoding = "gzip";
+        }
+        else
+        {
+            responseBytes = entry.Raw;
+        }
+
+        context.Response.StatusCode = StatusCodes.Status200OK;
+        context.Response.ContentType = contentType;
+        if (contentEncoding is not null)
+        {
+            context.Response.Headers["Content-Encoding"] = contentEncoding;
+        }
+
+        context.Response.ContentLength = responseBytes.Length;
+        if (HttpMethods.IsGet(method))
+        {
+            await context.Response.Body.WriteAsync(responseBytes).ConfigureAwait(false);
+        }
     }
 
     private static bool TryExtractAssetFileName(string path, out string fileName)
     {
         fileName = string.Empty;
 
-        string[] prefixes = { "/web/ui/", "/web/nova/", "/NovaUI/" };
-        foreach (var prefix in prefixes)
+        foreach (var prefix in AssetPrefixes)
         {
             var idx = path.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
             if (idx >= 0)
@@ -192,7 +247,7 @@ public class NovaWebMiddleware
             || path.EndsWith("/web", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static byte[]? GetEmbeddedAssetBytes(string fileName, string assetVersion)
+    private static AssetEntry? GetEmbeddedAssetEntry(string fileName, string assetVersion)
     {
         var cacheKey = $"{fileName}:{assetVersion}";
         return CachedAssets.GetOrAdd(cacheKey, _ =>
@@ -202,27 +257,61 @@ public class NovaWebMiddleware
             using var stream = assembly.GetManifestResourceStream(resourceName);
             if (stream is null)
             {
-                return Array.Empty<byte>();
+                return null;
             }
 
+            byte[] raw;
             if (fileName.Equals("spotlight.html", StringComparison.OrdinalIgnoreCase))
             {
                 using var reader = new StreamReader(stream, Encoding.UTF8);
                 var html = reader.ReadToEnd();
                 html = SpotlightCssHrefRegex.Replace(html, $"spotlight.css?v={assetVersion}");
-                return Encoding.UTF8.GetBytes(html);
+                raw = Encoding.UTF8.GetBytes(html);
+            }
+            else
+            {
+                using var ms = new MemoryStream();
+                stream.CopyTo(ms);
+                raw = ms.ToArray();
             }
 
-            using var ms = new MemoryStream();
-            stream.CopyTo(ms);
-            return ms.ToArray();
-        }) is { Length: > 0 } cached
-            ? cached
-            : null;
+            if (raw.Length == 0)
+            {
+                return null;
+            }
+
+            byte[] gzip;
+            using (var gzOut = new MemoryStream())
+            {
+                using (var gz = new GZipStream(gzOut, CompressionLevel.Optimal, leaveOpen: true))
+                {
+                    gz.Write(raw, 0, raw.Length);
+                }
+
+                gzip = gzOut.ToArray();
+            }
+
+            byte[] brotli;
+            using (var brOut = new MemoryStream())
+            {
+                using (var br = new BrotliStream(brOut, CompressionLevel.Optimal, leaveOpen: true))
+                {
+                    br.Write(raw, 0, raw.Length);
+                }
+
+                brotli = brOut.ToArray();
+            }
+
+            var hashBytes = SHA256.HashData(raw);
+            var etag = $"\"{Convert.ToHexString(hashBytes, 0, 8)}-{assetVersion}\"";
+            return new AssetEntry(raw, gzip, brotli, etag);
+        });
     }
 
     private async Task HandleIndexHtmlInjectionAsync(HttpContext context, Plugin plugin)
     {
+        var clientAcceptEncoding = context.Request.Headers.AcceptEncoding.ToString();
+
         // Request uncompressed fresh response from downstream static file middleware
         context.Request.Headers.Remove("Accept-Encoding");
         context.Request.Headers.Remove("If-None-Match");
@@ -266,14 +355,45 @@ public class NovaWebMiddleware
             var modifiedHtml = InjectNovaMarkup(html, plugin);
             var modifiedBytes = Encoding.UTF8.GetBytes(modifiedHtml);
 
+            byte[] outBytes = modifiedBytes;
+            string? outEncoding = null;
+            if (clientAcceptEncoding.Contains("br", StringComparison.OrdinalIgnoreCase))
+            {
+                using var brOut = new MemoryStream();
+                await using (var br = new BrotliStream(brOut, CompressionLevel.Fastest, leaveOpen: true))
+                {
+                    await br.WriteAsync(modifiedBytes).ConfigureAwait(false);
+                }
+
+                outBytes = brOut.ToArray();
+                outEncoding = "br";
+            }
+            else if (clientAcceptEncoding.Contains("gzip", StringComparison.OrdinalIgnoreCase))
+            {
+                using var gzOut = new MemoryStream();
+                await using (var gz = new GZipStream(gzOut, CompressionLevel.Fastest, leaveOpen: true))
+                {
+                    await gz.WriteAsync(modifiedBytes).ConfigureAwait(false);
+                }
+
+                outBytes = gzOut.ToArray();
+                outEncoding = "gzip";
+            }
+
             context.Response.Body = originalBody;
             context.Response.Headers.Remove("Content-Encoding");
+            if (outEncoding is not null)
+            {
+                context.Response.Headers["Content-Encoding"] = outEncoding;
+                context.Response.Headers["Vary"] = "Accept-Encoding";
+            }
+
             context.Response.Headers.Remove("ETag");
             context.Response.Headers.Remove("Last-Modified");
             context.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
-            context.Response.ContentLength = modifiedBytes.Length;
+            context.Response.ContentLength = outBytes.Length;
 
-            await originalBody.WriteAsync(modifiedBytes).ConfigureAwait(false);
+            await originalBody.WriteAsync(outBytes).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

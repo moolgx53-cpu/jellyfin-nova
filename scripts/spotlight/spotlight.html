@@ -16,8 +16,7 @@
 			-ms-overflow-style: none !important;
 		}
 		html::-webkit-scrollbar,
-		body::-webkit-scrollbar,
-		*::-webkit-scrollbar {
+		body::-webkit-scrollbar {
 			display: none !important;
 			width: 0 !important;
 			height: 0 !important;
@@ -161,14 +160,6 @@
 				catch { window.location.hash = route; }
 			}
 
-			async function fetchImageBlob(url, headers) {
-				try {
-					const res = await fetch(url, { headers });
-					if (!res.ok) return null;
-					return URL.createObjectURL(await res.blob());
-				} catch { return null; }
-			}
-
 			const isLegacyWebView = !(window.CSS && typeof window.CSS.supports === 'function' && window.CSS.supports('inset', '0'));
 
 			function startZoom(imgEl, durationMs, fromScale, toScale) {
@@ -199,7 +190,7 @@
 
 			const headers = authHeaders(token);
 
-			const FIELDS = 'Overview,RunTimeTicks,UserData,OfficialRating,CommunityRating,SeriesName,SeriesId,ParentIndexNumber,IndexNumber,PlaybackPositionTicks,BackdropImageTags,RemoteTrailers,ProviderIds,ProductionYear';
+			const FIELDS = 'Overview,RunTimeTicks,UserData,OfficialRating,CommunityRating,SeriesName,SeriesId,ParentIndexNumber,IndexNumber,PlaybackPositionTicks,BackdropImageTags,RemoteTrailers,ProviderIds,ProductionYear,ImageTags,ParentLogoImageTag,ParentLogoItemId,SeriesPrimaryImageTag';
 
 			async function fetchItems() {
 				let items = [];
@@ -997,34 +988,68 @@
 				});
 			}
 
-			function getFastImageUrl(itemId, type, width = 800, quality = 80) {
+			function getFastImageUrl(itemId, type, width = 800, quality = 80, tag = null) {
 				const tokenParam = token ? `&api_key=${token}` : '';
-				return `${base}/Items/${itemId}/Images/${type}?quality=${quality}&fillWidth=${width}${tokenParam}`;
+				const tagParam = tag ? `&tag=${tag}` : '';
+				return `${base}/Items/${itemId}/Images/${type}?quality=${quality}&fillWidth=${width}${tagParam}${tokenParam}`;
+			}
+
+			function getCanonicalBackdropUrl(item) {
+				if (!item) return null;
+				const isEp = item.Type === 'Episode';
+				const backdropTargetId = isEp ? (item.SeriesId || item.Id) : item.Id;
+				const dateSeed = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+				const backdropTags = item.BackdropImageTags || item.SeriesBackdropImageTags || [];
+				if (!isEp && backdropTags.length > 0) {
+					const backdropIdx = backdropTags.length > 1 ? (dateSeed % backdropTags.length) : 0;
+					const tag = backdropTags[backdropIdx];
+					const tokenParam = token ? `&api_key=${token}` : '';
+					const tagParam = tag ? `&tag=${tag}` : '';
+					return `${base}/Items/${backdropTargetId}/Images/Backdrop/${backdropIdx}?quality=80&fillWidth=1280${tagParam}${tokenParam}`;
+				}
+				const primaryTag = isEp
+					? (item.SeriesPrimaryImageTag || item.ImageTags?.Primary || null)
+					: (item.ImageTags?.Primary || null);
+				return getFastImageUrl(backdropTargetId, 'Primary', 1280, 80, primaryTag);
+			}
+
+			function getCanonicalLogoUrl(item) {
+				if (!item) return null;
+				if (item.ImageTags && !item.ImageTags.Logo && !item.ParentLogoImageTag) {
+					return null;
+				}
+				const isEp = item.Type === 'Episode';
+				const logoId = item.ParentLogoImageTag && item.ParentLogoItemId
+					? item.ParentLogoItemId
+					: (isEp ? (item.SeriesId || item.Id) : item.Id);
+				const logoTag = item.ImageTags?.Logo || item.ParentLogoImageTag || null;
+				return getFastImageUrl(logoId, 'Logo', 500, 85, logoTag);
 			}
 
 			function preloadItemAssets() {
 				if (!items || !items.length) return;
 				items.slice(0, 2).forEach(item => {
-					const isEp = item.Type === 'Episode';
-					const backdropTargetId = isEp ? (item.SeriesId || item.Id) : item.Id;
-					const backdropUrl = getFastImageUrl(backdropTargetId, isEp ? 'Primary' : 'Backdrop', 1280, 78);
-					const logoId = isEp ? (item.SeriesId || item.Id) : item.Id;
-					const logoUrl = getFastImageUrl(logoId, 'Logo', 450, 82);
-					const bImg = new Image();
-					bImg.src = backdropUrl;
-					const lImg = new Image();
-					lImg.src = logoUrl;
+					const backdropUrl = getCanonicalBackdropUrl(item);
+					if (backdropUrl) {
+						const bImg = new Image();
+						bImg.src = backdropUrl;
+					}
+					const logoUrl = getCanonicalLogoUrl(item);
+					if (logoUrl) {
+						const lImg = new Image();
+						lImg.src = logoUrl;
+					}
 				});
 			}
 
 			let currentActiveLayerKey = 'a';
+			let backdropResetTimer = null;
 
 			async function renderItem(index) {
 				const item = items[index];
 				if (!item) return;
 
 				const isEp = item.Type === 'Episode';
-				const logoId = isEp ? (item.SeriesId || item.Id) : item.Id;
 				const detailId = isEp ? (item.SeriesId || item.Id) : item.Id;
 				const detailRoute = `/details?id=${detailId}`;
 				const playRoute = `/video?id=${item.Id}`;
@@ -1034,21 +1059,8 @@
 				const nextLayerKey = currentActiveLayerKey === 'a' ? 'b' : 'a';
 				const nextImg = $(currentActiveLayerKey === 'a' ? 'backdrop-img-b' : 'backdrop-img-a');
 
-				const backdropTargetId = isEp ? (item.SeriesId || item.Id) : item.Id;
-
-				// Daily 24-Hour Rotating Backdrop Selection
-				const dateSeed = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-				const backdropTags = item.BackdropImageTags || item.SeriesBackdropImageTags || [];
-				let backdropUrl = getFastImageUrl(backdropTargetId, (isEp || backdropTags.length === 0) ? 'Primary' : 'Backdrop', 1280, 80);
-
-				if (backdropTags.length > 1 && !isEp) {
-					const backdropIdx = dateSeed % backdropTags.length;
-					const tag = backdropTags[backdropIdx];
-					const tokenParam = token ? `&api_key=${token}` : '';
-					backdropUrl = `${base}/Items/${backdropTargetId}/Images/Backdrop/${backdropIdx}?quality=78&fillWidth=1280&tag=${tag}${tokenParam}`;
-				}
-
-				const fallbackBackdropUrl = getFastImageUrl(item.Id, 'Primary', 1280, 80);
+				const backdropUrl = getCanonicalBackdropUrl(item);
+				const fallbackBackdropUrl = getFastImageUrl(item.Id, 'Primary', 1280, 80, item.ImageTags?.Primary || null);
 
 				nextImg.style.objectPosition = isEp ? 'center center' : 'center 20%';
 
@@ -1060,7 +1072,14 @@
 					nextImg.classList.add('active');
 					activeImg.classList.remove('active');
 					currentActiveLayerKey = nextLayerKey;
-					startZoom(nextImg, 9000, 1, 1.08);
+					startZoom(nextImg, 5000, 1, 1.08);
+					clearTimeout(backdropResetTimer);
+					backdropResetTimer = setTimeout(() => {
+						if (!activeImg.classList.contains('active')) {
+							activeImg.style.transition = 'none';
+							activeImg.style.transform = '';
+						}
+					}, 500);
 				};
 
 				const preloader = new Image();
@@ -1072,16 +1091,14 @@
 					swapBackdrop(backdropUrl);
 				}
 
-				// Preload adjacent slides for 0ms delay during navigation
+				// Preload adjacent slides with identical canonical URLs for 0ms delay during navigation
 				const nextIdx = (index + 1) % items.length;
 				const prevIdx = (index - 1 + items.length) % items.length;
 				[nextIdx, prevIdx].forEach(idx => {
 					const it = items[idx];
 					if (it) {
-						const ep = it.Type === 'Episode';
-						const bId = ep ? (it.SeriesId || it.Id) : it.Id;
-						const bUrl = getFastImageUrl(bId, ep ? 'Primary' : 'Backdrop', 1280, 80);
-						(new Image()).src = bUrl;
+						const bUrl = getCanonicalBackdropUrl(it);
+						if (bUrl) (new Image()).src = bUrl;
 					}
 				});
 
@@ -1091,20 +1108,26 @@
 				// Logo / title
 				const logoEl = $('logo');
 				const titleEl = $('title');
-				const logoUrl = getFastImageUrl(logoId, 'Logo', 500, 85);
+				const logoUrl = getCanonicalLogoUrl(item);
 
-				const logoPreloader = new Image();
-				logoPreloader.onload = () => {
-					logoEl.src = logoUrl;
-					logoEl.style.display = 'block';
-					titleEl.style.display = 'none';
-				};
-				logoPreloader.onerror = () => {
+				if (!logoUrl) {
 					logoEl.style.display = 'none';
 					titleEl.style.display = 'block';
 					titleEl.textContent = isEp ? item.SeriesName : item.Name;
-				};
-				logoPreloader.src = logoUrl;
+				} else {
+					const logoPreloader = new Image();
+					logoPreloader.onload = () => {
+						logoEl.src = logoUrl;
+						logoEl.style.display = 'block';
+						titleEl.style.display = 'none';
+					};
+					logoPreloader.onerror = () => {
+						logoEl.style.display = 'none';
+						titleEl.style.display = 'block';
+						titleEl.textContent = isEp ? item.SeriesName : item.Name;
+					};
+					logoPreloader.src = logoUrl;
+				}
 
 				// Episode label
 				let episodePrefix = '';
@@ -1234,7 +1257,10 @@
 				} catch (e) { }
 
 				const existingPlayer = targetDoc.body.querySelector('.abyss-trailer-player-overlay');
-				if (existingPlayer) existingPlayer.remove();
+				if (existingPlayer) {
+					try { existingPlayer._closePlayer?.(false); } catch (e) { }
+					existingPlayer.remove();
+				}
 
 				const playerOverlay = targetDoc.createElement('div');
 				playerOverlay.className = 'abyss-trailer-player-overlay';
@@ -1312,6 +1338,7 @@
 
 					targetWin.removeEventListener('keydown', handleKeyDown);
 					targetWin.removeEventListener('popstate', handlePopState);
+					targetWin.removeEventListener('hashchange', handleHashChange);
 					window.removeEventListener('keydown', handleKeyDown);
 
 					if (shouldPopHistory && historyPushed) {
@@ -1320,15 +1347,19 @@
 				};
 
 				const handlePopState = () => closePlayer(false);
+				const handleHashChange = () => closePlayer(false);
 				const handleKeyDown = (e) => {
 					if (e.key === 'Escape' || e.key === 'BackSpace') closePlayer(true);
 				};
+
+				playerOverlay._closePlayer = closePlayer;
 
 				const backBtn = playerOverlay.querySelector('.abyss-trailer-back-btn');
 				if (backBtn) backBtn.addEventListener('click', () => closePlayer(true));
 
 				targetWin.addEventListener('keydown', handleKeyDown);
 				targetWin.addEventListener('popstate', handlePopState);
+				targetWin.addEventListener('hashchange', handleHashChange);
 				window.addEventListener('keydown', handleKeyDown);
 			}
 
@@ -1597,11 +1628,17 @@
 			initTop10Row(items).catch(err => console.error('[Top10 Error]:', err));
 
 			try {
-				window.top.addEventListener('hashchange', () => {
+				const onTopHashChange = () => {
 					clearShowcaseHoverTimers();
 					if (activeShowcaseExpandedCard) collapseShowcaseCard(activeShowcaseExpandedCard, true);
 					if (isParentHomeVisible()) startAuto(); else stopAuto();
-				});
+				};
+				window.top.addEventListener('hashchange', onTopHashChange);
+				const cleanupTopHashChange = () => {
+					try { window.top.removeEventListener('hashchange', onTopHashChange); } catch (e) { }
+				};
+				window.addEventListener('pagehide', cleanupTopHashChange, { once: true });
+				window.addEventListener('unload', cleanupTopHashChange, { once: true });
 			} catch (e) { }
 
 			if ('IntersectionObserver' in window && heroEl) {

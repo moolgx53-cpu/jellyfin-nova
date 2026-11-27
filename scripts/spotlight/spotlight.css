@@ -49,7 +49,7 @@ body {
 
 html::-webkit-scrollbar,
 body::-webkit-scrollbar,
-*::-webkit-scrollbar {
+.top10-row::-webkit-scrollbar {
 	display: none !important;
 	width: 0 !important;
 	height: 0 !important;
@@ -287,7 +287,7 @@ body::-webkit-scrollbar,
 	border: none;
 	cursor: pointer;
 	text-decoration: none;
-	transition: all 0.5s var(--ease);
+	transition: transform 0.5s var(--ease), background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
 	white-space: nowrap;
 	box-sizing: border-box;
 }
@@ -986,7 +986,6 @@ body::-webkit-scrollbar,
 		border-color 0.35s ease,
 		box-shadow 0.35s ease;
 	cursor: pointer;
-	will-change: width, transform, opacity;
 }
 
 .showcase-3d-card>img.showcase-poster-img {
@@ -1028,8 +1027,6 @@ body::-webkit-scrollbar,
 	height: 3.5px;
 	border-radius: 999px;
 	background: rgba(255, 255, 255, 0.22);
-	backdrop-filter: blur(6px);
-	-webkit-backdrop-filter: blur(6px);
 	overflow: hidden;
 	z-index: 12;
 	opacity: 0;

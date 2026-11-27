@@ -122,7 +122,6 @@
     }
 
     function applyAll() {
-        cleanDuplicateBrandingCss();
         setVideoState();
         setItemDetailState();
         setThemeLockedState();
@@ -141,6 +140,8 @@
         }, 120);
     }
 
+    cleanDuplicateBrandingCss();
+    setTimeout(cleanDuplicateBrandingCss, 1500);
     applyAll();
 
     try {
@@ -156,7 +157,7 @@
                     }
                     continue;
                 }
-                if (t.closest && t.closest('.abyss-custom-osd-bar, .abyss-gesture-hud, .abyss-card-trailer-stage, .library-hero-banner')) {
+                if (t.closest && t.closest('.abyss-custom-osd-bar, .abyss-gesture-hud, .abyss-card-trailer-stage, .library-hero-banner, #videoOsdPage, .videoOsdBottom, .videoSubtitles, .videoSubtitlesInner, .nowPlayingBar, .itemsContainer, .scrollSlider, .card')) {
                     continue;
                 }
                 scheduleApply();
